@@ -1,5 +1,5 @@
 {   
-    "model_path": "/ibk/model", 
+    "model_path": "/stock-service/model", 
     "model_name": "kfdeberta-trained",
     "embedding_model": "kakaobank/kf-deberta-base",
     "language_model": "davidkim205/komt-mistral-7b-v1",
