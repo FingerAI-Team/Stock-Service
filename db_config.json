@@ -1,0 +1,7 @@
+{   
+    "host": "postgres_postgresql-master_1",
+    "db_name": "ibk_db",
+    "user_id": "ibk-manager",
+    "user_pw": "fingerai2024!",
+    "port": 5432
+}
