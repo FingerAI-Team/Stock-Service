@@ -112,6 +112,7 @@ class VecProcessor:
     '''
     pass
 
+
 class TimeProcessor:
     def get_previous_day_date(self):
         '''
@@ -129,7 +130,6 @@ class TimeProcessor:
         '''
         now = datetime.now()
         return str(now.year), str(now.month).zfill(2), str(now.day).zfill(2)
-
 
 
 

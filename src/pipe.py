@@ -16,6 +16,7 @@ class EnvManager:
         load_dotenv()
         self.args = args 
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
+        self.bearer_token = os.getenv("BEARER_TOKEN")
         if not self.openai_api_key:
             raise ValueError("OpenAI API 키가 로드되지 않았습니다.")
         
@@ -58,6 +59,33 @@ class DBManager:
         postgres = PostgresDB(db_connection)
         table_editor = TableEditor(db_connection)
         return postgres, table_editor
+
+
+class APIPipeline:
+    def __init__(self, bearer_tok):
+        self.bearer_tok = bearer_tok 
+    
+    def get_data(self, date, tenant_id='ibk'):
+        url = f"https://chat-api.ibks.onelineai.com/api/ibk_securities/admin/logs?tenant_id={tenant_id}"
+        request_url = f"{url}&from_date_utc={date}&to_date_utc={date}"
+        headers = {
+            "Authorization": f"Bearer {self.bearer_tok}"
+        }
+        response = requests.get(request_url, headers=headers)
+        data = response.json()
+        return data
+    
+    def process_data(self, data):
+        '''
+        api로 받은 데이터를 postgres db에 저장 가능한 형태로 변경  
+        date, qa, content, user_id, tenant_id: ibk, msty 
+        '''
+        records = []
+        for d in data:
+            records.append({"date": d["date"], "q/a": "Q", "content": d["Q"], "user_id": d["user_id"]})
+            records.append({"date": d["date"], "q/a": "A", "content": d["A"], "user_id": d["user_id"]})
+        input_data = pd.DataFrame(records, columns=["date", "q/a", "content", "user_id"])
+        return input_data
 
 
 class ModelManager:
