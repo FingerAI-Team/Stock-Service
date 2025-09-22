@@ -4,10 +4,12 @@ import pandas as pd
 from dotenv import load_dotenv
 import argparse 
 import logging
-import schedule
 import time
 import os
 from datetime import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from scheduler_config import get_schedule_config, print_available_schedules
 
 logging.basicConfig(
     level=logging.INFO,  # 로그 레벨 설정 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -98,12 +100,51 @@ if __name__ == '__main__':
     cli_parser.add_argument('--file_name', type=str, default='conv_log-0705-0902.xlsx')
     cli_parser.add_argument('--config_path', type=str, default='./config/')
     cli_parser.add_argument('--task_name', type=str, default='cls')
-    cli_parser.add_argument('--process', type=str, default='daily')
+    cli_parser.add_argument('--process', type=str, default='daily', 
+                           help='실행 모드: daily(일회성), scheduled(스케줄링)')
+    cli_parser.add_argument('--schedule_type', type=str, default='hourly',
+                           help='스케줄 타입: hourly, daily, every_30min, every_15min, business_hours')
     cli_parser.add_argument('--query', type=str, default=None)
     cli_args = cli_parser.parse_args()
     
-    '''schedule.every().day.at("05:10").do(main, cli_args)
-    while True:   # 스케줄러를 유지하는 루프
-        schedule.run_pending()   # 대기 중인 작업 실행
-        time.sleep(1)'''
-    main(cli_args)
+    # 스케줄링 모드 확인
+    if cli_args.process == 'scheduled':
+        # 사용 가능한 스케줄 옵션 출력
+        print_available_schedules()
+        
+        # 스케줄 설정 가져오기
+        schedule_config = get_schedule_config(cli_args.schedule_type)
+        print(f"\n✅ 선택된 스케줄: {schedule_config['description']}")
+        
+        # APScheduler를 사용한 스케줄링
+        scheduler = BackgroundScheduler()
+        
+        # 스케줄된 작업 추가
+        scheduler.add_job(
+            func=main,
+            trigger=schedule_config['trigger'],
+            args=[cli_args],
+            id='data_collection_job',
+            name=f'데이터 수집 ({cli_args.schedule_type})',
+            replace_existing=True,
+            max_instances=1  # 동시 실행 방지
+        )
+        
+        # 스케줄러 시작
+        scheduler.start()
+        logger = logging.getLogger(__name__)
+        logger.info(f"🕐 APScheduler가 시작되었습니다. {schedule_config['description']}")
+        logger.info("📅 예정된 작업들:")
+        for job in scheduler.get_jobs():
+            logger.info(f"   - {job.name}: {job.next_run_time}")
+        
+        try:
+            # 메인 스레드 유지
+            while True:
+                time.sleep(60)  # 1분마다 체크
+        except KeyboardInterrupt:
+            logger.info("⏹️ 스케줄러를 종료합니다...")
+            scheduler.shutdown()
+    else:
+        # 일회성 실행
+        main(cli_args)

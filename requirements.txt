@@ -13,6 +13,7 @@ spacy
 load_dotenv
 psycopg2-binary
 schedule
+apscheduler
 openpyxl
 accelerate
 numpy<2
