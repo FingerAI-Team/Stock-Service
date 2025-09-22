@@ -82,13 +82,13 @@ class TableEditor:
             if data_type == 'table':
                 for idx in range(len(data)):
                     self.db_connection.cur.execute(
-                        f"INSERT INTO {table_name} (conv_id, date, qa, content, user_id) VALUES (%s, %s, %s, %s, %s)",
-                        (data['conv_id'][idx], data['date'][idx], data['q/a'][idx], data['content'][idx], data['user_id'][idx])
+                        f"INSERT INTO {table_name} (conv_id, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s)",
+                        (data['conv_id'][idx], data['date'][idx], data['q/a'][idx], data['content'][idx], data['user_id'][idx], data['tenant_id'][idx])
                     )
                     self.db_connection.conn.commit()
             elif data_type == 'raw':
                 self.db_connection.cur.execute(
-                    f"INSERT INTO {table_name} (conv_id, date, qa, content, user_id) VALUES (%s, %s, %s, %s, %s)",
+                    f"INSERT INTO {table_name} (conv_id, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s)",
                     tuple(data)
                 )
                 self.db_connection.conn.commit()
