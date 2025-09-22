@@ -70,7 +70,7 @@ class APIPipeline:
         url = f"https://chat-api.ibks.onelineai.com/api/ibk_securities/admin/logs?tenant_id={tenant_id}"
         # 다음 날을 to_date로 설정 (get_data_api.py와 동일한 방식)
         from datetime import datetime, timedelta
-        from_date = datetime.strptime(start_date, "%Y-%m-%d")
+        from_date = datetime.strptime(date, "%Y-%m-%d")
         end_date = from_date + timedelta(days=1)
         end_date = datetime.strptime(end_date, "%Y-%m-%d")
         request_url = f"{url}&from_date_utc={from_date}&to_date_utc={end_date}"
