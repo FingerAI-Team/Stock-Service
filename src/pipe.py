@@ -72,7 +72,6 @@ class APIPipeline:
         from datetime import datetime, timedelta
         from_date = datetime.strptime(date, "%Y-%m-%d")
         end_date = from_date + timedelta(days=1)
-        end_date = datetime.strptime(end_date, "%Y-%m-%d")
         request_url = f"{url}&from_date_utc={from_date}&to_date_utc={end_date}"
         headers = {
             "Authorization": f"Bearer {self.bearer_tok}"

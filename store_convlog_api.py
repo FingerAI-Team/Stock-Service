@@ -36,7 +36,7 @@ def main(args):
             input_data = pd.read_excel(os.path.join(args.data_path, args.file_name))
     elif args.process == 'daily':    # 매일 12시 10분에 전일 데이터 저장
         yy, mm, dd = pipe.time_p.get_previous_day_date()
-        start_date = yy + mm + dd
+        start_date = yy + "-" + mm + "-" + dd
         api_data = api_pipeline.get_data(date=start_date, tenant_id='ibk')        
         if api_data:
             print(f"첫 번째 데이터 샘플: {api_data[0] if api_data else 'None'}")
