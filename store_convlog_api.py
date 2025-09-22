@@ -35,7 +35,7 @@ def main(args):
             input_data = pd.read_excel(os.path.join(args.data_path, args.file_name))
     elif args.process == 'daily':    # 매일 12시 10분에 전일 데이터 저장
         yy, mm, dd = pipe.time_p.get_previous_day_date()
-        crawling_date = yy + mm + dd     # 20240301, 20241021 ... 
+        crawling_date = yy + '-' + mm + '-' + dd     # 20240301, 20241021 ... 
         api_data = api_pipeline.get_data(date=crawling_date, tenant_id='ibk')
         input_data = api_pipeline.process_data(api_data)
         print(input_data.head())
