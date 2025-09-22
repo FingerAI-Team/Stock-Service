@@ -7,6 +7,7 @@ import logging
 import schedule
 import time
 import os
+from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,  # 로그 레벨 설정 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -35,15 +36,28 @@ def main(args):
             input_data = pd.read_excel(os.path.join(args.data_path, args.file_name))
     elif args.process == 'daily':    # 매일 12시 10분에 전일 데이터 저장
         yy, mm, dd = pipe.time_p.get_previous_day_date()
-        crawling_date = yy + '-' + mm + '-' + dd     # 20240301, 20241021 ... 
-        api_data = api_pipeline.get_data(date=crawling_date, tenant_id='ibk')
+        start_date = yy + mm + dd
+        api_data = api_pipeline.get_data(date=start_date, tenant_id='ibk')        
+        if api_data:
+            print(f"첫 번째 데이터 샘플: {api_data[0] if api_data else 'None'}")
+        
         input_data = api_pipeline.process_data(api_data)
-        print(input_data.head())
+        print(f"처리된 데이터 shape: {input_data.shape}")        
+        if input_data.empty:
+            print("❌ 처리된 데이터가 비어있습니다. 다른 날짜를 시도해보세요.")
+            return
+        else:
+            print(input_data.head())
 
-    input_data = input_data[['date', 'q/a', 'content', 'user_id']]
+    input_data = input_data[['date', 'q/a', 'content', 'user_id', 'tenant_id']]
     conv_ids = []
     for idx in tqdm(range(len(input_data))):   # 챗봇 대화 로그 데이터에 PK 추가 
-        date_value = input_data['date'][idx]
+        date_str = input_data['date'][idx]
+        # 날짜 문자열을 datetime 객체로 변환
+        if isinstance(date_str, str):
+            date_value = datetime.fromisoformat(date_str)
+        else:
+            date_value = date_str
         pk_date = f"{str(date_value.year)}{str(date_value.month).zfill(2)}{str(date_value.day).zfill(2)}"
         conv_id = pk_date + '_' + str(idx).zfill(5)
         conv_ids.append(conv_id)

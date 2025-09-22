@@ -9,8 +9,8 @@ load_dotenv()
 bearer_token = os.getenv("BEARER_TOKEN")
 url = "https://chat-api.ibks.onelineai.com/api/ibk_securities/admin/logs?tenant_id=ibk"
 
-from_date_utc = "2025-09-18"
-to_date_utc = "2025-09-19"
+from_date_utc = "2025-09-1"
+to_date_utc = "2025-09-3"
 
 request_url = f"{url}&from_date_utc={from_date_utc}&to_date_utc={to_date_utc}"
 headers = {
@@ -39,5 +39,5 @@ for idx in tqdm(range(len(input_data))):   # 챗봇 대화 로그 데이터에 P
     conv_id = pk_date + '_' + str(idx).zfill(5)
     conv_ids.append(conv_id)
 
-print(conv_ids[:3])
+print(conv_ids[:20])
 # tenant_id, Q, A, date, user_id 

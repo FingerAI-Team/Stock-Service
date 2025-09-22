@@ -9,6 +9,7 @@ import pandas as pd
 import time
 import json
 import os
+import requests
 
 
 class EnvManager:
@@ -67,24 +68,58 @@ class APIPipeline:
     
     def get_data(self, date, tenant_id='ibk'):
         url = f"https://chat-api.ibks.onelineai.com/api/ibk_securities/admin/logs?tenant_id={tenant_id}"
-        request_url = f"{url}&from_date_utc={date}&to_date_utc={date}"
+        # 다음 날을 to_date로 설정 (get_data_api.py와 동일한 방식)
+        from datetime import datetime, timedelta
+        from_date = datetime.strptime(start_date, "%Y-%m-%d")
+        end_date = from_date + timedelta(days=1)
+        end_date = datetime.strptime(end_date, "%Y-%m-%d")
+        request_url = f"{url}&from_date_utc={from_date}&to_date_utc={end_date}"
         headers = {
             "Authorization": f"Bearer {self.bearer_tok}"
         }
-        response = requests.get(request_url, headers=headers)
-        data = response.json()
-        return data
+        
+        print(f"API 요청 URL: {request_url}")
+        print(f"Bearer Token: {self.bearer_tok[:10]}..." if self.bearer_tok else "Bearer Token 없음")
+        
+        try:
+            response = requests.get(request_url, headers=headers)
+            print(f"API 응답 상태 코드: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                print(f"API 응답 데이터 타입: {type(data)}")
+                return data
+            else:
+                print(f"API 요청 실패: {response.status_code} - {response.text}")
+                return []
+                
+        except Exception as e:
+            print(f"API 요청 중 오류 발생: {str(e)}")
+            return []
     
     def process_data(self, data):
         '''
         api로 받은 데이터를 postgres db에 저장 가능한 형태로 변경  
         date, qa, content, user_id, tenant_id: ibk, msty 
         '''
+        if not data:
+            print("API에서 받은 데이터가 비어있습니다.")
+            return pd.DataFrame(columns=["date", "q/a", "content", "user_id", "tenant_id"])
+            
         records = []
         for d in data:
-            records.append({"date": d["date"], "q/a": "Q", "content": d["Q"], "user_id": d["user_id"]})
-            records.append({"date": d["date"], "q/a": "A", "content": d["A"], "user_id": d["user_id"]})
-        input_data = pd.DataFrame(records, columns=["date", "q/a", "content", "user_id"])
+            if "Q" in d and "A" in d and "date" in d and "user_id" in d:
+                records.append({"date": d["date"], "q/a": "Q", "content": d["Q"], "user_id": d["user_id"], "tenant_id": d["tenant_id"]})
+                records.append({"date": d["date"], "q/a": "A", "content": d["A"], "user_id": d["user_id"], "tenant_id": d["tenant_id"]})
+            else:
+                print(f"데이터 구조가 예상과 다릅니다: {d.keys()}")
+        
+        if not records:
+            print("처리 가능한 레코드가 없습니다.")
+            return pd.DataFrame(columns=["date", "q/a", "content", "user_id", "tenant_id"])
+            
+        input_data = pd.DataFrame(records, columns=["date", "q/a", "content", "user_id", "tenant_id"])
+        print(f"처리된 레코드 수: {len(input_data)}")
         return input_data
 
 
