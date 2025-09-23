@@ -53,6 +53,8 @@ def main(args):
 
     input_data = input_data[['date', 'q/a', 'content', 'user_id', 'tenant_id']]
     conv_ids = []
+    content_hashes = []
+    
     for idx in tqdm(range(len(input_data))):   # 챗봇 대화 로그 데이터에 PK 추가 
         date_str = input_data['date'][idx]
         # 날짜 문자열을 datetime 객체로 변환
@@ -62,14 +64,19 @@ def main(args):
             date_value = date_str
         pk_date = f"{str(date_value.year)}{str(date_value.month).zfill(2)}{str(date_value.day).zfill(2)}"
         
-        # 더 안전한 conv_id 생성: 날짜 + 사용자ID + 내용 해시
+        # 원래 방식: 순서 기반 conv_id (Q와 A가 같은 conv_id를 가져야 함)
+        conv_id = pk_date + '_' + str(idx).zfill(5)
+        conv_ids.append(conv_id)
+        
+        # 내용 기반 해시값 생성 (중복 체크용)
+        # Q와 A는 같은 대화이므로 user_id, date, content만으로 해시 생성
         import hashlib
         content_hash = hashlib.md5(
-            f"{input_data['user_id'][idx]}_{input_data['content'][idx]}_{input_data['q/a'][idx]}".encode()
-        ).hexdigest()[:8]
-        conv_id = f"{pk_date}_{input_data['user_id'][idx]}_{content_hash}"
-        conv_ids.append(conv_id)
+            f"{input_data['user_id'][idx]}_{input_data['content'][idx]}_{input_data['date'][idx]}".encode()
+        ).hexdigest()
+        content_hashes.append(content_hash)
     input_data.insert(0, 'conv_id', conv_ids)
+    input_data.insert(1, 'hash_value', content_hashes)  # 해시값 컬럼 추가
     
     # 중복 저장 방지 통계
     total_records = len(input_data)
@@ -77,9 +84,10 @@ def main(args):
     new_records = 0
     
     for idx in tqdm(range(len(input_data))):   # PostgreSQL 테이블에 데이터 저장
-        if pipe.postgres.check_pk(pipe.env_manager.conv_tb_name, input_data['conv_id'][idx]):   # 데이터 존재 여부 확인
+        # 해시값 기준으로 중복 체크
+        if pipe.postgres.check_hash_duplicate(pipe.env_manager.conv_tb_name, input_data['hash_value'][idx]):
             existing_records += 1
-            logger.info(f"이미 존재하는 데이터: {input_data['conv_id'][idx]}")
+            logger.info(f"이미 존재하는 데이터 (해시: {input_data['hash_value'][idx][:8]}...): {input_data['conv_id'][idx]}")
             continue
         
         new_records += 1

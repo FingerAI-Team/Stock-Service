@@ -67,6 +67,23 @@ class PostgresDB:
         self.db_connection.cur.execute(f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE conv_id = %s)", (pk_value,))
         result = self.db_connection.cur.fetchone()
         return result[0] if result else False
+    
+    def check_hash_duplicate(self, table_name, hash_value):
+        '''
+        테이블에 동일한 hash_value가 존재하는지 확인합니다. 
+        이미 존재하는 해시인 경우, True를 반환합니다.
+        
+        args:
+        table_name (str): 테이블 이름
+        hash_value (str): 해시값
+        
+        returns:
+        bool: 중복 여부 (True: 중복됨, False: 중복되지 않음)
+        '''
+        self.db_connection.conn.commit()
+        self.db_connection.cur.execute(f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE hash_value = %s)", (hash_value,))
+        result = self.db_connection.cur.fetchone()
+        return result[0] if result else False
        
 
 class TableEditor:
@@ -82,15 +99,22 @@ class TableEditor:
             if data_type == 'table':
                 for idx in range(len(data)):
                     self.db_connection.cur.execute(
-                        f"INSERT INTO {table_name} (conv_id, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s)",
-                        (data['conv_id'][idx], data['date'][idx], data['q/a'][idx], data['content'][idx], data['user_id'][idx], data['tenant_id'][idx])
+                        f"INSERT INTO {table_name} (conv_id, hash_value, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                        (data['conv_id'][idx], data['hash_value'][idx], data['date'][idx], data['q/a'][idx], data['content'][idx], data['user_id'][idx], data['tenant_id'][idx])
                     )
                     self.db_connection.conn.commit()
             elif data_type == 'raw':
-                self.db_connection.cur.execute(
-                    f"INSERT INTO {table_name} (conv_id, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s)",
-                    tuple(data)
-                )
+                # raw 데이터의 경우 해시값이 포함된 새로운 형식
+                if len(data) == 7:  # conv_id, hash_value, date, q/a, content, user_id, tenant_id
+                    self.db_connection.cur.execute(
+                        f"INSERT INTO {table_name} (conv_id, hash_value, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                        tuple(data)
+                    )
+                elif len(data) == 6:  # 기존 형식 (해시값 없음)
+                    self.db_connection.cur.execute(
+                        f"INSERT INTO {table_name} (conv_id, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s)",
+                        tuple(data)
+                    )
                 self.db_connection.conn.commit()
         elif task == 'delete':
             pass 

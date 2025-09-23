@@ -9,8 +9,8 @@ load_dotenv()
 bearer_token = os.getenv("BEARER_TOKEN")
 url = "https://chat-api.ibks.onelineai.com/api/ibk_securities/admin/logs?tenant_id=ibk"
 
-from_date_utc = "2025-09-1"
-to_date_utc = "2025-09-3"
+from_date_utc = "2025-09-22"
+to_date_utc = "2025-09-23"
 
 request_url = f"{url}&from_date_utc={from_date_utc}&to_date_utc={to_date_utc}"
 headers = {
