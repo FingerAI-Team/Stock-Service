@@ -147,6 +147,9 @@ def main(args):
             date_value = date_value.replace(tzinfo=timezone.utc)
         kst_date = date_value.astimezone(kst)
         
+        # date 컬럼에 저장할 값도 KST로 변환
+        input_data.at[idx, 'date'] = kst_date.isoformat()
+        
         pk_date = f"{str(kst_date.year)}{str(kst_date.month).zfill(2)}{str(kst_date.day).zfill(2)}"
         
         # 원래 방식: 순서 기반 conv_id (Q와 A가 같은 conv_id를 가져야 함)
