@@ -6,6 +6,7 @@
 
 import os
 import sys
+import json
 import logging
 from datetime import datetime
 from tqdm import tqdm
@@ -36,7 +37,13 @@ def delete_data_after_20250917(preview_mode=True):
     
     # 데이터베이스 연결
     try:
-        db_conn = DBConnection()
+        # DB 설정 파일 로드
+        config_path = './config/'
+        with open(os.path.join(config_path, 'db_config.json')) as f:
+            db_config = json.load(f)
+        
+        db_conn = DBConnection(db_config)
+        db_conn.connect()
         postgres = PostgresDB(db_conn)
         table_name = 'ibk_convlog'
         
