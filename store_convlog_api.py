@@ -138,7 +138,16 @@ def main(args):
             date_value = datetime.fromisoformat(date_str)
         else:
             date_value = date_str
-        pk_date = f"{str(date_value.year)}{str(date_value.month).zfill(2)}{str(date_value.day).zfill(2)}"
+        
+        # UTC를 서울 시간(KST, UTC+9)으로 변환
+        from datetime import timezone, timedelta
+        kst = timezone(timedelta(hours=9))
+        if date_value.tzinfo is None:
+            # timezone 정보가 없으면 UTC로 가정
+            date_value = date_value.replace(tzinfo=timezone.utc)
+        kst_date = date_value.astimezone(kst)
+        
+        pk_date = f"{str(kst_date.year)}{str(kst_date.month).zfill(2)}{str(kst_date.day).zfill(2)}"
         
         # 원래 방식: 순서 기반 conv_id (Q와 A가 같은 conv_id를 가져야 함)
         conv_id = pk_date + '_' + str(idx).zfill(5)

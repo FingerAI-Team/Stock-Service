@@ -90,7 +90,16 @@ def main(args):
             date_value = datetime.fromisoformat(date_str)
         else:
             date_value = date_str
-        pk_date = f"{str(date_value.year)}{str(date_value.month).zfill(2)}{str(date_value.day).zfill(2)}"
+        
+        # UTC를 서울 시간(KST, UTC+9)으로 변환
+        from datetime import timezone, timedelta
+        kst = timezone(timedelta(hours=9))
+        if date_value.tzinfo is None:
+            # timezone 정보가 없으면 UTC로 가정
+            date_value = date_value.replace(tzinfo=timezone.utc)
+        kst_date = date_value.astimezone(kst)
+        
+        pk_date = f"{str(kst_date.year)}{str(kst_date.month).zfill(2)}{str(kst_date.day).zfill(2)}"
         
         if pk_date not in date_counters:
             # 해당 날짜의 기존 최대 conv_id 번호 조회
@@ -114,7 +123,16 @@ def main(args):
             date_value = datetime.fromisoformat(date_str)
         else:
             date_value = date_str
-        pk_date = f"{str(date_value.year)}{str(date_value.month).zfill(2)}{str(date_value.day).zfill(2)}"
+        
+        # UTC를 서울 시간(KST, UTC+9)으로 변환
+        from datetime import timezone, timedelta
+        kst = timezone(timedelta(hours=9))
+        if date_value.tzinfo is None:
+            # timezone 정보가 없으면 UTC로 가정
+            date_value = date_value.replace(tzinfo=timezone.utc)
+        kst_date = date_value.astimezone(kst)
+        
+        pk_date = f"{str(kst_date.year)}{str(kst_date.month).zfill(2)}{str(kst_date.day).zfill(2)}"
         
         # 날짜별로 고유한 인덱스 생성 (기존 최대값 + 1부터 시작)
         date_counters[pk_date] += 1
