@@ -95,11 +95,11 @@ def main(args):
         if pk_date not in date_counters:
             # 해당 날짜의 기존 최대 conv_id 번호 조회
             try:
-                pipe.db_connection.cur.execute(
+                pipe.postgres.db_connection.cur.execute(
                     f"SELECT MAX(CAST(SUBSTRING(conv_id FROM 10) AS INTEGER)) FROM {pipe.env_manager.conv_tb_name} WHERE conv_id LIKE %s",
                     (f"{pk_date}_%",)
                 )
-                result = pipe.db_connection.cur.fetchone()
+                result = pipe.postgres.db_connection.cur.fetchone()
                 max_existing = result[0] if result[0] is not None else -1
                 date_counters[pk_date] = max_existing
                 print(f"   {pk_date}: 기존 최대 번호 {max_existing}, 다음 번호부터 시작")
