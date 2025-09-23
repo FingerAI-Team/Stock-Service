@@ -36,17 +36,41 @@ def main(args):
             input_data = pd.read_csv(os.path.join(args.data_path, args.file_name))
         elif args.file_name.split('.')[-1] == 'xlsx':
             input_data = pd.read_excel(os.path.join(args.data_path, args.file_name))
-    elif args.process == 'daily':    # 매일 12시 10분에 전일 데이터 저장
-        yy, mm, dd = pipe.time_p.get_previous_day_date()
-        start_date = yy + "-" + mm + "-" + dd
-        api_data = api_pipeline.get_data(date=start_date, tenant_id='ibk')        
-        if api_data:
-            print(f"첫 번째 데이터 샘플: {api_data[0] if api_data else 'None'}")
+    elif args.process == 'daily':    # 날짜 범위 지정하여 데이터 저장
+        start_date = "2025-09-16"
+        end_date = "2025-09-21"
+        print(f"📅 데이터 수집 기간: {start_date} ~ {end_date}")
         
-        input_data = api_pipeline.process_data(api_data)
+        # 날짜 범위에 대해 API 호출
+        all_api_data = []
+        from datetime import datetime, timedelta
+        
+        current_date = datetime.strptime(start_date, "%Y-%m-%d")
+        end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
+        
+        while current_date <= end_date_obj:
+            date_str = current_date.strftime("%Y-%m-%d")
+            print(f"🔍 {date_str} 데이터 수집 중...")
+            
+            api_data = api_pipeline.get_data(date=date_str, tenant_id='ibk')
+            if api_data:
+                all_api_data.extend(api_data)
+                print(f"   ✅ {len(api_data)}개 레코드 수집")
+            else:
+                print(f"   ⚠️ 데이터 없음")
+            
+            current_date += timedelta(days=1)
+        
+        print(f"📊 총 수집된 API 데이터: {len(all_api_data)}개")
+        
+        if not all_api_data:
+            print("❌ 수집된 데이터가 없습니다.")
+            return
+        
+        input_data = api_pipeline.process_data(all_api_data)
         print(f"처리된 데이터 shape: {input_data.shape}")        
         if input_data.empty:
-            print("❌ 처리된 데이터가 비어있습니다. 다른 날짜를 시도해보세요.")
+            print("❌ 처리된 데이터가 비어있습니다.")
             return
         else:
             print(input_data.head())
