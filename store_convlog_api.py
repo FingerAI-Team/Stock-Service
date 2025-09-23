@@ -53,14 +53,26 @@ def main(args):
     pipe = PipelineController(env_manager=env_manager, preprocessor=preprocessor, db_manager=db_manager)   
     pipe.set_env()
 
+    # input_data 초기화
+    input_data = None
+
     if args.process == 'code-test':   # 저장할 파일명 지정   
-        if args.file_name.split('.')[-1] == 'csv': 
-            input_data = pd.read_csv(os.path.join(args.data_path, args.file_name))
-        elif args.file_name.split('.')[-1] == 'xlsx':
-            input_data = pd.read_excel(os.path.join(args.data_path, args.file_name))
+        file_extension = args.file_name.split('.')[-1].lower()
+        file_path = os.path.join(args.data_path, args.file_name)
+        
+        if file_extension == 'csv': 
+            input_data = pd.read_csv(file_path)
+        elif file_extension == 'xlsx':
+            input_data = pd.read_excel(file_path)
+        else:
+            logger.error(f"❌ 지원하지 않는 파일 형식입니다: {file_extension}")
+            logger.error("지원 형식: csv, xlsx")
+            return
     elif args.process == 'daily':    # 매일 12시 10분에 전일 데이터 저장
         yy, mm, dd = pipe.time_p.get_previous_day_date()
         start_date = yy + "-" + mm + "-" + dd
+        logger.info(f"📅 전일 데이터 수집 시작: {start_date}")
+        
         api_data = api_pipeline.get_data(date=start_date, tenant_id='ibk')        
         if api_data:
             print(f"첫 번째 데이터 샘플: {api_data[0] if api_data else 'None'}")
@@ -68,12 +80,54 @@ def main(args):
         input_data = api_pipeline.process_data(api_data)
         print(f"처리된 데이터 shape: {input_data.shape}")        
         if input_data.empty:
-            print("❌ 처리된 데이터가 비어있습니다. 다른 날짜를 시도해보세요.")
+            logger.warning("❌ 처리된 데이터가 비어있습니다. 다른 날짜를 시도해보세요.")
             return
         else:
             print(input_data.head())
+    elif args.process == 'scheduled':  # 스케줄링 모드 - 매시간 실행
+        # 현재 시간 기준으로 데이터 수집 (실시간 또는 최근 데이터)
+        current_time = datetime.now()
+        # 매시간 실행이므로 현재 시간의 데이터를 수집
+        start_date = current_time.strftime("%Y-%m-%d")
+        logger.info(f"📅 스케줄링 모드 - 현재 시간 데이터 수집: {start_date}")
+        
+        api_data = api_pipeline.get_data(date=start_date, tenant_id='ibk')        
+        if api_data:
+            logger.info(f"API에서 {len(api_data)}개의 데이터를 가져왔습니다.")
+            print(f"첫 번째 데이터 샘플: {api_data[0] if api_data else 'None'}")
+        else:
+            logger.warning("API에서 데이터를 가져오지 못했습니다.")
+        
+        input_data = api_pipeline.process_data(api_data)
+        print(f"처리된 데이터 shape: {input_data.shape}")        
+        if input_data.empty:
+            logger.warning("❌ 처리된 데이터가 비어있습니다. 데이터가 없을 수 있습니다.")
+            return
+        else:
+            print(input_data.head())
+    else:
+        logger.error(f"❌ 지원하지 않는 프로세스 타입입니다: {args.process}")
+        logger.error("지원 타입: code-test, daily, scheduled")
+        return
 
-    input_data = input_data[['date', 'q/a', 'content', 'user_id', 'tenant_id']]
+    # input_data가 None이거나 비어있는 경우 체크
+    if input_data is None:
+        logger.error("❌ input_data가 초기화되지 않았습니다.")
+        return
+        
+    if input_data.empty:
+        logger.warning("❌ input_data가 비어있습니다.")
+        return
+
+    # 필요한 컬럼이 있는지 확인
+    required_columns = ['date', 'q/a', 'content', 'user_id', 'tenant_id']
+    missing_columns = [col for col in required_columns if col not in input_data.columns]
+    if missing_columns:
+        logger.error(f"❌ 필요한 컬럼이 없습니다: {missing_columns}")
+        logger.error(f"현재 컬럼: {list(input_data.columns)}")
+        return
+
+    input_data = input_data[required_columns]
     conv_ids = []
     for idx in tqdm(range(len(input_data))):   # 챗봇 대화 로그 데이터에 PK 추가 
         date_str = input_data['date'][idx]
