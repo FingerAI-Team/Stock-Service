@@ -79,6 +79,34 @@ def main(args):
     conv_ids = []
     content_hashes = []
     
+    # 날짜별 인덱스 카운터를 위한 딕셔너리 (기존 DB의 최대값부터 시작)
+    date_counters = {}
+    
+    # 기존 데이터베이스에서 각 날짜별 최대 conv_id 번호 조회
+    print("🔍 기존 데이터베이스의 conv_id 범위 확인 중...")
+    for idx in range(len(input_data)):
+        date_str = input_data['date'][idx]
+        if isinstance(date_str, str):
+            date_value = datetime.fromisoformat(date_str)
+        else:
+            date_value = date_str
+        pk_date = f"{str(date_value.year)}{str(date_value.month).zfill(2)}{str(date_value.day).zfill(2)}"
+        
+        if pk_date not in date_counters:
+            # 해당 날짜의 기존 최대 conv_id 번호 조회
+            try:
+                pipe.db_connection.cur.execute(
+                    f"SELECT MAX(CAST(SUBSTRING(conv_id FROM 10) AS INTEGER)) FROM {pipe.env_manager.conv_tb_name} WHERE conv_id LIKE %s",
+                    (f"{pk_date}_%",)
+                )
+                result = pipe.db_connection.cur.fetchone()
+                max_existing = result[0] if result[0] is not None else -1
+                date_counters[pk_date] = max_existing
+                print(f"   {pk_date}: 기존 최대 번호 {max_existing}, 다음 번호부터 시작")
+            except Exception as e:
+                print(f"   {pk_date}: 기존 데이터 조회 실패, 0부터 시작 ({e})")
+                date_counters[pk_date] = -1
+    
     for idx in tqdm(range(len(input_data))):   # 챗봇 대화 로그 데이터에 PK 추가 
         date_str = input_data['date'][idx]
         # 날짜 문자열을 datetime 객체로 변환
@@ -88,8 +116,11 @@ def main(args):
             date_value = date_str
         pk_date = f"{str(date_value.year)}{str(date_value.month).zfill(2)}{str(date_value.day).zfill(2)}"
         
-        # 원래 방식: 순서 기반 conv_id (Q와 A가 같은 conv_id를 가져야 함)
-        conv_id = pk_date + '_' + str(idx).zfill(5)
+        # 날짜별로 고유한 인덱스 생성 (기존 최대값 + 1부터 시작)
+        date_counters[pk_date] += 1
+        
+        # 날짜별 고유한 conv_id 생성
+        conv_id = pk_date + '_' + str(date_counters[pk_date]).zfill(5)
         conv_ids.append(conv_id)
         
         # 내용 기반 해시값 생성 (중복 체크용)
