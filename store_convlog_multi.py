@@ -25,8 +25,8 @@ def main(args):
     pipe = PipelineController(env_manager=env_manager, preprocessor=preprocessor, db_manager=db_manager)   
     pipe.set_env()
 
-    start_date = datetime(2025, 4, 10)
-    end_date = datetime(2025, 5, 22)
+    start_date = datetime(2025, 7, 31)
+    end_date = datetime(2025, 8, 30)
     delta = timedelta(days=1)
 
     current_date = start_date

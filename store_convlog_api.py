@@ -11,18 +11,40 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from scheduler_config import get_schedule_config, print_available_schedules
 
-logging.basicConfig(
-    level=logging.INFO,  # 로그 레벨 설정 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("app.log"),# mode='w'),  # 로그를 파일에 기록
-    ]
-)
-logging.basicConfig(filename='warnings.log', level=logging.WARNING)
+# 로깅 설정 - 파일 핸들러와 콘솔 핸들러 모두 설정
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# 파일 핸들러 (모든 로그)
+file_handler = logging.FileHandler("app.log", encoding='utf-8')
+file_handler.setLevel(logging.INFO)
+file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(file_formatter)
+
+# 경고 전용 파일 핸들러
+warning_handler = logging.FileHandler("warnings.log", encoding='utf-8')
+warning_handler.setLevel(logging.WARNING)
+warning_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+warning_handler.setFormatter(warning_formatter)
+
+# 콘솔 핸들러 (스케줄러 실행 시 확인용)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(console_formatter)
+
+# 핸들러 추가
+logger.addHandler(file_handler)
+logger.addHandler(warning_handler)
+logger.addHandler(console_handler)
+
 logging.captureWarnings(True)
 
 def main(args):
     logger = logging.getLogger(__name__)
+    logger.info("🚀 데이터 수집 작업이 시작되었습니다.")
+    logger.info(f"📅 실행 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
     env_manager = EnvManager(args)
     preprocessor = PreProcessor()
     db_manager = DBManager(env_manager.db_config)
@@ -87,11 +109,15 @@ def main(args):
         pipe.table_editor.edit_conv_table('insert', pipe.env_manager.conv_tb_name, data_type='raw', data=data_set)
     
     # 저장 결과 요약
-    print(f"\n📊 데이터 저장 결과:")
+    summary_msg = f"📊 데이터 저장 완료 - 전체: {total_records}, 신규: {new_records}, 중복: {existing_records}"
+    print(f"\n{summary_msg}")
     print(f"   전체 레코드: {total_records}")
     print(f"   새로 저장된 레코드: {new_records}")
     print(f"   이미 존재하는 레코드: {existing_records}")
-    print(f"   중복률: {(existing_records/total_records*100):.1f}%" if total_records > 0 else "   중복률: 0%")            
+    print(f"   중복률: {(existing_records/total_records*100):.1f}%" if total_records > 0 else "   중복률: 0%")
+    
+    logger.info(summary_msg)
+    logger.info(f"✅ 데이터 수집 작업이 완료되었습니다. ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})")
     pipe.postgres.db_connection.close()
 
 if __name__ == '__main__':
@@ -138,10 +164,25 @@ if __name__ == '__main__':
         for job in scheduler.get_jobs():
             logger.info(f"   - {job.name}: {job.next_run_time}")
         
+        # 스케줄러 상태 확인을 위한 주기적 로그
+        logger.info("⏰ 스케줄러가 실행 중입니다. 매시간 5분에 데이터 수집이 실행됩니다.")
+        
         try:
-            # 메인 스레드 유지
+            # 메인 스레드 유지 및 주기적 상태 확인
+            check_count = 0
             while True:
                 time.sleep(60)  # 1분마다 체크
+                check_count += 1
+                
+                # 10분마다 스케줄러 상태 로그
+                if check_count % 10 == 0:
+                    jobs = scheduler.get_jobs()
+                    if jobs:
+                        next_run = jobs[0].next_run_time
+                        logger.info(f"⏰ 스케줄러 실행 중 - 다음 실행 예정: {next_run}")
+                    else:
+                        logger.warning("⚠️ 등록된 작업이 없습니다!")
+                        
         except KeyboardInterrupt:
             logger.info("⏹️ 스케줄러를 종료합니다...")
             scheduler.shutdown()
