@@ -84,7 +84,7 @@ def main(args):
     hash_refs = []
     
     # Q&A 쌍을 위한 임시 저장소
-    qa_pairs = {}  # {qa_key: q_hash_value}
+    qa_pairs = {}  # {idx: q_hash_value}
     
     # 날짜별 인덱스 카운터를 위한 딕셔너리 (기존 DB의 최대값부터 시작)
     date_counters = {}
@@ -159,24 +159,19 @@ def main(args):
         
         # Q&A 쌍 연결을 위한 hash_ref 생성
         qa_type = input_data['q/a'][idx]
-        user_id = input_data['user_id'][idx]
-        date_key = input_data['date'][idx]
-        
-        # Q&A 쌍을 구분하기 위한 키 생성 (user_id + date + 순서)
-        qa_key = f"{user_id}_{date_key}_{idx//2}"  # 2개씩 쌍이므로 idx//2로 그룹핑
         
         if qa_type == 'Q':
             # Q인 경우: 자신의 해시값을 저장하고 hash_ref는 NULL
-            qa_pairs[qa_key] = content_hash
+            qa_pairs[idx] = content_hash  # 현재 Q의 해시값을 저장
             hash_refs.append(None)
         elif qa_type == 'A':
-            # A인 경우: 해당하는 Q의 해시값을 hash_ref로 설정
-            if qa_key in qa_pairs:
-                hash_refs.append(qa_pairs[qa_key])
+            # A인 경우: 바로 앞의 Q(idx-1)의 해시값을 hash_ref로 설정
+            if (idx - 1) in qa_pairs:
+                hash_refs.append(qa_pairs[idx - 1])
             else:
-                # Q를 찾지 못한 경우 (데이터 순서 문제 등)
+                # Q를 찾지 못한 경우
                 hash_refs.append(None)
-                print(f"⚠️ A에 대응하는 Q를 찾지 못함: {conv_id}")
+                print(f"⚠️ A에 대응하는 Q를 찾지 못함: {conv_id} (idx: {idx})")
         else:
             hash_refs.append(None)
     
@@ -189,6 +184,12 @@ def main(args):
     print(f"🔍 hash_value 값 샘플 (처음 5개): {content_hashes[:5]}")
     print(f"🔍 input_data 컬럼 순서: {list(input_data.columns)}")
     print(f"🔍 input_data shape: {input_data.shape}")
+    
+    # Q&A 연결 통계
+    q_count = sum(1 for qa in input_data['q/a'] if qa == 'Q')
+    a_count = sum(1 for qa in input_data['q/a'] if qa == 'A')
+    a_with_ref = sum(1 for ref in hash_refs if ref is not None)
+    print(f"📊 Q&A 연결 통계: Q {q_count}개, A {a_count}개, A에 hash_ref 있음 {a_with_ref}개")
     
     # 중복 저장 방지 통계
     total_records = len(input_data)
