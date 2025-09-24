@@ -99,22 +99,29 @@ class TableEditor:
             if data_type == 'table':
                 for idx in range(len(data)):
                     self.db_connection.cur.execute(
-                        f"INSERT INTO {table_name} (conv_id, hash_value, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                        (data['conv_id'][idx], data['hash_value'][idx], data['date'][idx], data['q/a'][idx], data['content'][idx], data['user_id'][idx], data['tenant_id'][idx])
+                        f"INSERT INTO {table_name} (conv_id, hash_value, hash_ref, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                        (data['conv_id'][idx], data['hash_value'][idx], data.get('hash_ref', [None]*len(data))[idx], data['date'][idx], data['q/a'][idx], data['content'][idx], data['user_id'][idx], data['tenant_id'][idx])
                     )
                     self.db_connection.conn.commit()
             elif data_type == 'raw':
-                # raw 데이터의 경우 해시값이 포함된 새로운 형식
-                if len(data) == 7:  # conv_id, hash_value, date, q/a, content, user_id, tenant_id
+                # raw 데이터의 경우 해시값과 hash_ref가 포함된 새로운 형식
+                if len(data) == 8:  # conv_id, hash_value, hash_ref, date, q/a, content, user_id, tenant_id
+                    self.db_connection.cur.execute(
+                        f"INSERT INTO {table_name} (conv_id, hash_value, hash_ref, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                        tuple(data)
+                    )
+                elif len(data) == 7:  # 기존 형식 (hash_ref 없음)
                     self.db_connection.cur.execute(
                         f"INSERT INTO {table_name} (conv_id, hash_value, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                         tuple(data)
                     )
-                elif len(data) == 6:  # 기존 형식 (해시값 없음)
+                elif len(data) == 6:  # 더 오래된 형식 (해시값도 없음)
                     self.db_connection.cur.execute(
                         f"INSERT INTO {table_name} (conv_id, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s)",
                         tuple(data)
                     )
+                else:
+                    raise ValueError(f"지원하지 않는 데이터 형식입니다. 길이: {len(data)}")
                 self.db_connection.conn.commit()
         elif task == 'delete':
             pass 

@@ -158,6 +158,10 @@ def main(args):
     input_data = input_data[required_columns]
     conv_ids = []
     content_hashes = []
+    hash_refs = []
+    
+    # Q&A 쌍을 위한 임시 저장소
+    qa_pairs = {}  # {qa_key: q_hash_value}
     
     # 날짜별 인덱스 카운터를 위한 딕셔너리 (기존 DB의 최대값부터 시작)
     date_counters = {}
@@ -231,8 +235,33 @@ def main(args):
             f"{input_data['user_id'][idx]}_{input_data['content'][idx]}_{input_data['date'][idx]}".encode()
         ).hexdigest()
         content_hashes.append(content_hash)
+        
+        # Q&A 쌍 연결을 위한 hash_ref 생성
+        qa_type = input_data['q/a'][idx]
+        user_id = input_data['user_id'][idx]
+        date_key = input_data['date'][idx]
+        
+        # Q&A 쌍을 구분하기 위한 키 생성 (user_id + date + 순서)
+        qa_key = f"{user_id}_{date_key}_{idx//2}"  # 2개씩 쌍이므로 idx//2로 그룹핑
+        
+        if qa_type == 'Q':
+            # Q인 경우: 자신의 해시값을 저장하고 hash_ref는 NULL
+            qa_pairs[qa_key] = content_hash
+            hash_refs.append(None)
+        elif qa_type == 'A':
+            # A인 경우: 해당하는 Q의 해시값을 hash_ref로 설정
+            if qa_key in qa_pairs:
+                hash_refs.append(qa_pairs[qa_key])
+            else:
+                # Q를 찾지 못한 경우 (데이터 순서 문제 등)
+                hash_refs.append(None)
+                logger.warning(f"A에 대응하는 Q를 찾지 못함: {conv_id}")
+        else:
+            hash_refs.append(None)
+    
     input_data.insert(0, 'conv_id', conv_ids)
     input_data.insert(1, 'hash_value', content_hashes)  # 해시값 컬럼 추가
+    input_data.insert(2, 'hash_ref', hash_refs)  # Q&A 연결용 hash_ref 컬럼 추가
     
     # 중복 저장 방지 통계
     total_records = len(input_data)
