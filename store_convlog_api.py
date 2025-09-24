@@ -6,7 +6,7 @@ import argparse
 import logging
 import time
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from scheduler_config import get_schedule_config, print_available_schedules
@@ -70,7 +70,6 @@ def main(args):
             return
     elif args.process == 'daily':    # 매일 12시 10분에 당일 데이터 저장
         # 당일 날짜 기준으로 API 호출 (ibk, ibks 모두 수집)
-        from datetime import datetime
         today = datetime.now().strftime("%Y-%m-%d")
         logger.info(f"📅 당일 데이터 수집: {today}")
         
@@ -176,7 +175,6 @@ def main(args):
             date_value = date_str
         
         # UTC를 서울 시간(KST, UTC+9)으로 변환
-        from datetime import timezone, timedelta
         kst = timezone(timedelta(hours=9))
         if date_value.tzinfo is None:
             # timezone 정보가 없으면 UTC로 가정
@@ -209,7 +207,6 @@ def main(args):
             date_value = date_str
         
         # UTC를 서울 시간(KST, UTC+9)으로 변환
-        from datetime import timezone, timedelta
         kst = timezone(timedelta(hours=9))
         if date_value.tzinfo is None:
             # timezone 정보가 없으면 UTC로 가정
