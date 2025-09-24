@@ -263,6 +263,12 @@ def main(args):
     input_data.insert(1, 'hash_value', content_hashes)  # 해시값 컬럼 추가
     input_data.insert(2, 'hash_ref', hash_refs)  # Q&A 연결용 hash_ref 컬럼 추가
     
+    # 디버깅: hash_ref 값 확인
+    print(f"🔍 hash_ref 값 샘플 (처음 5개): {hash_refs[:5]}")
+    print(f"🔍 hash_value 값 샘플 (처음 5개): {content_hashes[:5]}")
+    print(f"🔍 input_data 컬럼 순서: {list(input_data.columns)}")
+    print(f"🔍 input_data shape: {input_data.shape}")
+    
     # 중복 저장 방지 통계
     total_records = len(input_data)
     existing_records = 0
@@ -277,6 +283,15 @@ def main(args):
         
         new_records += 1
         data_set = tuple(input_data.iloc[idx].values)
+        
+        # 디버깅: 저장할 데이터 확인 (처음 3개만)
+        if idx < 3:
+            print(f"🔍 저장할 데이터 {idx}: {data_set}")
+            print(f"   - conv_id: {data_set[0]}")
+            print(f"   - hash_value: {data_set[1]}")
+            print(f"   - hash_ref: {data_set[2]}")
+            print(f"   - q/a: {data_set[4]}")
+        
         pipe.table_editor.edit_conv_table('insert', pipe.env_manager.conv_tb_name, data_type='raw', data=data_set)
     
     # 저장 결과 요약
