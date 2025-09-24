@@ -68,37 +68,65 @@ def main(args):
             logger.error(f"❌ 지원하지 않는 파일 형식입니다: {file_extension}")
             logger.error("지원 형식: csv, xlsx")
             return
-    elif args.process == 'daily':    # 매일 12시 10분에 전일 데이터 저장
-        yy, mm, dd = pipe.time_p.get_previous_day_date()
-        start_date = yy + "-" + mm + "-" + dd
-        logger.info(f"📅 전일 데이터 수집 시작: {start_date}")
+    elif args.process == 'daily':    # 매일 12시 10분에 당일 데이터 저장
+        # 당일 날짜 기준으로 API 호출 (ibk, ibks 모두 수집)
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f"📅 당일 데이터 수집: {today}")
         
-        api_data = api_pipeline.get_data(date=start_date, tenant_id='ibk')        
-        if api_data:
-            print(f"첫 번째 데이터 샘플: {api_data[0] if api_data else 'None'}")
+        # ibk와 ibks 두 tenant_id 모두 수집
+        all_api_data = []
+        tenant_ids = ['ibk', 'ibks']
         
-        input_data = api_pipeline.process_data(api_data)
+        for tenant_id in tenant_ids:
+            logger.info(f"🔍 {tenant_id} tenant 데이터 수집 중...")
+            api_data = api_pipeline.get_data(date=today, tenant_id=tenant_id)
+            if api_data:
+                all_api_data.extend(api_data)
+                logger.info(f"   ✅ {tenant_id}: {len(api_data)}개 레코드 수집")
+            else:
+                logger.info(f"   ⚠️ {tenant_id}: 데이터 없음")
+        
+        logger.info(f"📊 총 수집된 API 데이터: {len(all_api_data)}개")
+        
+        if not all_api_data:
+            logger.warning("❌ 수집된 데이터가 없습니다.")
+            return
+        
+        input_data = api_pipeline.process_data(all_api_data)
         print(f"처리된 데이터 shape: {input_data.shape}")        
         if input_data.empty:
-            logger.warning("❌ 처리된 데이터가 비어있습니다. 다른 날짜를 시도해보세요.")
+            logger.warning("❌ 처리된 데이터가 비어있습니다.")
             return
         else:
             print(input_data.head())
     elif args.process == 'scheduled':  # 스케줄링 모드 - 매시간 실행
-        # 현재 시간 기준으로 데이터 수집 (실시간 또는 최근 데이터)
+        # 현재 시간 기준으로 데이터 수집 (ibk, ibks 모두 수집)
         current_time = datetime.now()
         # 매시간 실행이므로 현재 시간의 데이터를 수집
         start_date = current_time.strftime("%Y-%m-%d")
         logger.info(f"📅 스케줄링 모드 - 현재 시간 데이터 수집: {start_date}")
         
-        api_data = api_pipeline.get_data(date=start_date, tenant_id='ibk')        
-        if api_data:
-            logger.info(f"API에서 {len(api_data)}개의 데이터를 가져왔습니다.")
-            print(f"첫 번째 데이터 샘플: {api_data[0] if api_data else 'None'}")
-        else:
-            logger.warning("API에서 데이터를 가져오지 못했습니다.")
+        # ibk와 ibks 두 tenant_id 모두 수집
+        all_api_data = []
+        tenant_ids = ['ibk', 'ibks']
         
-        input_data = api_pipeline.process_data(api_data)
+        for tenant_id in tenant_ids:
+            logger.info(f"🔍 {tenant_id} tenant 데이터 수집 중...")
+            api_data = api_pipeline.get_data(date=start_date, tenant_id=tenant_id)
+            if api_data:
+                all_api_data.extend(api_data)
+                logger.info(f"   ✅ {tenant_id}: {len(api_data)}개 레코드 수집")
+            else:
+                logger.info(f"   ⚠️ {tenant_id}: 데이터 없음")
+        
+        logger.info(f"📊 총 수집된 API 데이터: {len(all_api_data)}개")
+        
+        if not all_api_data:
+            logger.warning("❌ 수집된 데이터가 없습니다.")
+            return
+        
+        input_data = api_pipeline.process_data(all_api_data)
         print(f"처리된 데이터 shape: {input_data.shape}")        
         if input_data.empty:
             logger.warning("❌ 처리된 데이터가 비어있습니다. 데이터가 없을 수 있습니다.")
@@ -131,6 +159,43 @@ def main(args):
     conv_ids = []
     content_hashes = []
     
+    # 날짜별 인덱스 카운터를 위한 딕셔너리 (기존 DB의 최대값부터 시작)
+    date_counters = {}
+    
+    # 기존 데이터베이스에서 각 날짜별 최대 conv_id 번호 조회
+    print("🔍 기존 데이터베이스의 conv_id 범위 확인 중...")
+    for idx in range(len(input_data)):
+        date_str = input_data['date'][idx]
+        if isinstance(date_str, str):
+            date_value = datetime.fromisoformat(date_str)
+        else:
+            date_value = date_str
+        
+        # UTC를 서울 시간(KST, UTC+9)으로 변환
+        from datetime import timezone, timedelta
+        kst = timezone(timedelta(hours=9))
+        if date_value.tzinfo is None:
+            # timezone 정보가 없으면 UTC로 가정
+            date_value = date_value.replace(tzinfo=timezone.utc)
+        kst_date = date_value.astimezone(kst)
+        
+        pk_date = f"{str(kst_date.year)}{str(kst_date.month).zfill(2)}{str(kst_date.day).zfill(2)}"
+        
+        if pk_date not in date_counters:
+            # 해당 날짜의 기존 최대 conv_id 번호 조회
+            try:
+                pipe.postgres.db_connection.cur.execute(
+                    f"SELECT MAX(CAST(SUBSTRING(conv_id FROM 10) AS INTEGER)) FROM {pipe.env_manager.conv_tb_name} WHERE conv_id LIKE %s",
+                    (f"{pk_date}_%",)
+                )
+                result = pipe.postgres.db_connection.cur.fetchone()
+                max_existing = result[0] if result[0] is not None else -1
+                date_counters[pk_date] = max_existing
+                print(f"   {pk_date}: 기존 최대 번호 {max_existing}, 다음 번호부터 시작")
+            except Exception as e:
+                print(f"   {pk_date}: 기존 데이터 조회 실패, 0부터 시작 ({e})")
+                date_counters[pk_date] = -1
+    
     for idx in tqdm(range(len(input_data))):   # 챗봇 대화 로그 데이터에 PK 추가 
         date_str = input_data['date'][idx]
         # 날짜 문자열을 datetime 객체로 변환
@@ -152,8 +217,11 @@ def main(args):
         
         pk_date = f"{str(kst_date.year)}{str(kst_date.month).zfill(2)}{str(kst_date.day).zfill(2)}"
         
-        # 원래 방식: 순서 기반 conv_id (Q와 A가 같은 conv_id를 가져야 함)
-        conv_id = pk_date + '_' + str(idx).zfill(5)
+        # 날짜별로 고유한 인덱스 생성 (기존 최대값 + 1부터 시작)
+        date_counters[pk_date] += 1
+        
+        # 날짜별 고유한 conv_id 생성
+        conv_id = pk_date + '_' + str(date_counters[pk_date]).zfill(5)
         conv_ids.append(conv_id)
         
         # 내용 기반 해시값 생성 (중복 체크용)

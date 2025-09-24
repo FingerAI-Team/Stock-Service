@@ -37,27 +37,31 @@ def main(args):
         elif args.file_name.split('.')[-1] == 'xlsx':
             input_data = pd.read_excel(os.path.join(args.data_path, args.file_name))
     elif args.process == 'daily':    # 날짜 범위 지정하여 데이터 저장
-        start_date = "2025-09-16"
-        end_date = "2025-09-21"
-        print(f"📅 데이터 수집 기간: {start_date} ~ {end_date}")
+        # API 호출용 날짜 설정 (KST 변환 없이 그대로 사용)
+        from_date = "2025-09-22"
+        to_date = "2025-09-23"
+        print(f"📅 API 요청 날짜: {from_date} ~ {to_date}")
         
-        # 날짜 범위에 대해 API 호출
+        # 날짜 범위에 대해 API 호출 (ibk, ibks 모두 수집)
         all_api_data = []
         from datetime import datetime, timedelta
+        tenant_ids = ['ibk', 'ibks']
         
-        current_date = datetime.strptime(start_date, "%Y-%m-%d")
-        end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
+        current_date = datetime.strptime(from_date, "%Y-%m-%d")
+        end_date_obj = datetime.strptime(to_date, "%Y-%m-%d")
         
         while current_date <= end_date_obj:
             date_str = current_date.strftime("%Y-%m-%d")
             print(f"🔍 {date_str} 데이터 수집 중...")
             
-            api_data = api_pipeline.get_data(date=date_str, tenant_id='ibk')
-            if api_data:
-                all_api_data.extend(api_data)
-                print(f"   ✅ {len(api_data)}개 레코드 수집")
-            else:
-                print(f"   ⚠️ 데이터 없음")
+            for tenant_id in tenant_ids:
+                print(f"   📋 {tenant_id} tenant 수집 중...")
+                api_data = api_pipeline.get_data(date=date_str, tenant_id=tenant_id)
+                if api_data:
+                    all_api_data.extend(api_data)
+                    print(f"      ✅ {tenant_id}: {len(api_data)}개 레코드 수집")
+                else:
+                    print(f"      ⚠️ {tenant_id}: 데이터 없음")
             
             current_date += timedelta(days=1)
         
