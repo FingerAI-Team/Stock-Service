@@ -29,6 +29,8 @@ print(len(data))
 print(data[1].keys())
 print(data[1]['tenant_id'])
 
+import hashlib
+
 records = []
 for r in data:
     # tenant_id 처리 (ibk, ibks 모두 지원)
@@ -36,23 +38,44 @@ for r in data:
     if tenant_id not in ["ibk", "ibks"]:
         tenant_id = "ibk"  # 알 수 없는 경우 ibk로 설정
     
-    records.append({"date": r["date"], "q/a": "Q", "content": r["Q"], "user_id": r["user_id"], "tenant_id": tenant_id})
-    records.append({"date": r["date"], "q/a": "A", "content": r["A"], "user_id": r["user_id"], "tenant_id": tenant_id})
+    # Q와 A의 해시값을 미리 생성
+    q_hash = hashlib.md5(f"{r['user_id']}_{r['Q']}_{r['date']}".encode()).hexdigest()
+    a_hash = hashlib.md5(f"{r['user_id']}_{r['A']}_{r['date']}".encode()).hexdigest()
+    
+    records.append({
+        "date": r["date"], 
+        "q/a": "Q", 
+        "content": r["Q"], 
+        "user_id": r["user_id"], 
+        "tenant_id": tenant_id,
+        "hash_value": q_hash,
+        "hash_ref": None  # Q는 hash_ref가 NULL
+    })
+    records.append({
+        "date": r["date"], 
+        "q/a": "A", 
+        "content": r["A"], 
+        "user_id": r["user_id"], 
+        "tenant_id": tenant_id,
+        "hash_value": a_hash,
+        "hash_ref": q_hash  # A는 Q의 hash_value를 hash_ref로
+    })
 
-input_data = pd.DataFrame(records, columns=["date", "q/a", "content", "user_id", "tenant_id"])
-input_data = input_data[['date', 'q/a', 'content', 'user_id', 'tenant_id']]
+input_data = pd.DataFrame(records, columns=["date", "q/a", "content", "user_id", "tenant_id", "hash_value", "hash_ref"])
+input_data = input_data[['date', 'q/a', 'content', 'user_id', 'tenant_id', 'hash_value', 'hash_ref']]
+
+print(input_data[['q/a', 'content', 'hash_value', 'hash_ref']].head())
 
 # 날짜별 독립적인 카운터를 위한 딕셔너리
 date_counters = {}
 
+# conv_id 생성 및 KST 변환
 conv_ids = []
-for idx in tqdm(range(len(input_data))):   # 챗봇 대화 로그 데이터에 PK 추가 
-    date_str = input_data['date'][idx]
-    date_value = datetime.fromisoformat(date_str)
+for idx in tqdm(range(len(input_data))):
+    date_value = datetime.fromisoformat(input_data['date'][idx])
     
     # UTC를 한국 시간(KST)으로 변환
     if date_value.tzinfo is None:
-        # timezone 정보가 없으면 UTC로 가정
         date_value = date_value.replace(tzinfo=timezone.utc)
     kst_date = date_value.astimezone(kst)
     
@@ -71,6 +94,14 @@ for idx in tqdm(range(len(input_data))):   # 챗봇 대화 로그 데이터에 P
     conv_id = pk_date + '_' + str(date_counters[pk_date]).zfill(5)
     conv_ids.append(conv_id)
 
-print(conv_ids[-3:])
-print(conv_ids[:3])
-# tenant_id, Q, A, date, user_id 
+input_data.insert(0, 'conv_id', conv_ids)
+
+# Q&A 연결 통계
+q_count = sum(1 for qa in input_data['q/a'] if qa == 'Q')
+a_count = sum(1 for qa in input_data['q/a'] if qa == 'A')
+a_with_ref = sum(1 for ref in input_data['hash_ref'] if ref is not None)
+print(f"📊 Q&A 연결 통계: Q {q_count}개, A {a_count}개, A에 hash_ref 있음 {a_with_ref}개")
+
+print(f"🔍 최종 데이터 shape: {input_data.shape}")
+print(f"🔍 컬럼: {list(input_data.columns)}")
+print(f"🔍 conv_id 샘플: {conv_ids[:3]} ... {conv_ids[-3:]}") 

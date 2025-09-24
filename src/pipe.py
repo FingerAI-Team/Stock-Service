@@ -122,25 +122,46 @@ class APIPipeline:
     def process_data(self, data):
         '''
         api로 받은 데이터를 postgres db에 저장 가능한 형태로 변경  
-        date, qa, content, user_id, tenant_id: ibk, msty 
+        date, qa, content, user_id, tenant_id, hash_value, hash_ref: ibk, msty 
         '''
         if not data:
             print("API에서 받은 데이터가 비어있습니다.")
-            return pd.DataFrame(columns=["date", "q/a", "content", "user_id", "tenant_id"])
+            return pd.DataFrame(columns=["date", "q/a", "content", "user_id", "tenant_id", "hash_value", "hash_ref"])
             
+        import hashlib
         records = []
         for d in data:
             if "Q" in d and "A" in d and "date" in d and "user_id" in d:
-                records.append({"date": d["date"], "q/a": "Q", "content": d["Q"], "user_id": d["user_id"], "tenant_id": d["tenant_id"]})
-                records.append({"date": d["date"], "q/a": "A", "content": d["A"], "user_id": d["user_id"], "tenant_id": d["tenant_id"]})
+                # Q와 A의 해시값을 미리 생성
+                q_hash = hashlib.md5(f"{d['user_id']}_{d['Q']}_{d['date']}".encode()).hexdigest()
+                a_hash = hashlib.md5(f"{d['user_id']}_{d['A']}_{d['date']}".encode()).hexdigest()
+                
+                records.append({
+                    "date": d["date"], 
+                    "q/a": "Q", 
+                    "content": d["Q"], 
+                    "user_id": d["user_id"], 
+                    "tenant_id": d["tenant_id"],
+                    "hash_value": q_hash,
+                    "hash_ref": None  # Q는 hash_ref가 NULL
+                })
+                records.append({
+                    "date": d["date"], 
+                    "q/a": "A", 
+                    "content": d["A"], 
+                    "user_id": d["user_id"], 
+                    "tenant_id": d["tenant_id"],
+                    "hash_value": a_hash,
+                    "hash_ref": q_hash  # A는 Q의 hash_value를 hash_ref로
+                })
             else:
                 print(f"데이터 구조가 예상과 다릅니다: {d.keys()}")
         
         if not records:
             print("처리 가능한 레코드가 없습니다.")
-            return pd.DataFrame(columns=["date", "q/a", "content", "user_id", "tenant_id"])
+            return pd.DataFrame(columns=["date", "q/a", "content", "user_id", "tenant_id", "hash_value", "hash_ref"])
             
-        input_data = pd.DataFrame(records, columns=["date", "q/a", "content", "user_id", "tenant_id"])
+        input_data = pd.DataFrame(records, columns=["date", "q/a", "content", "user_id", "tenant_id", "hash_value", "hash_ref"])
         print(f"처리된 레코드 수: {len(input_data)}")
         return input_data
 

@@ -78,117 +78,50 @@ def main(args):
         else:
             print(input_data.head())
 
-    input_data = input_data[['date', 'q/a', 'content', 'user_id', 'tenant_id']]
-    conv_ids = []
-    content_hashes = []
-    hash_refs = []
+    input_data = input_data[['date', 'q/a', 'content', 'user_id', 'tenant_id', 'hash_value', 'hash_ref']]
     
-    # Q&A 쌍을 위한 임시 저장소
-    qa_pairs = {}  # {idx: q_hash_value}
-    
-    # 날짜별 인덱스 카운터를 위한 딕셔너리 (기존 DB의 최대값부터 시작)
+    # 날짜별 conv_id 카운터 초기화
     date_counters = {}
     
-    # 기존 데이터베이스에서 각 날짜별 최대 conv_id 번호 조회
-    print("🔍 기존 데이터베이스의 conv_id 범위 확인 중...")
-    for idx in range(len(input_data)):
-        date_str = input_data['date'][idx]
-        if isinstance(date_str, str):
-            date_value = datetime.fromisoformat(date_str)
-        else:
-            date_value = date_str
-        
-        # UTC를 서울 시간(KST, UTC+9)으로 변환
+    # 기존 DB에서 각 날짜별 최대 conv_id 조회
+    for date_str in input_data['date'].unique():
+        date_value = datetime.fromisoformat(date_str)
         kst = timezone(timedelta(hours=9))
         if date_value.tzinfo is None:
-            # timezone 정보가 없으면 UTC로 가정
             date_value = date_value.replace(tzinfo=timezone.utc)
         kst_date = date_value.astimezone(kst)
-        
         pk_date = f"{str(kst_date.year)}{str(kst_date.month).zfill(2)}{str(kst_date.day).zfill(2)}"
         
-        if pk_date not in date_counters:
-            # 해당 날짜의 기존 최대 conv_id 번호 조회
-            try:
-                pipe.postgres.db_connection.cur.execute(
-                    f"SELECT MAX(CAST(SUBSTRING(conv_id FROM 10) AS INTEGER)) FROM {pipe.env_manager.conv_tb_name} WHERE conv_id LIKE %s",
-                    (f"{pk_date}_%",)
-                )
-                result = pipe.postgres.db_connection.cur.fetchone()
-                max_existing = result[0] if result[0] is not None else -1
-                date_counters[pk_date] = max_existing
-                print(f"   {pk_date}: 기존 최대 번호 {max_existing}, 다음 번호부터 시작")
-            except Exception as e:
-                print(f"   {pk_date}: 기존 데이터 조회 실패, 0부터 시작 ({e})")
-                date_counters[pk_date] = -1
+        try:
+            pipe.postgres.db_connection.cur.execute(
+                f"SELECT MAX(conv_id) FROM {pipe.env_manager.conv_tb_name} WHERE conv_id LIKE %s",
+                (f"{pk_date}_%",)
+            )
+            max_conv_id = pipe.postgres.db_connection.cur.fetchone()[0]
+            date_counters[pk_date] = int(max_conv_id.split('_')[1]) if max_conv_id else 0
+        except:
+            date_counters[pk_date] = 0
     
-    for idx in tqdm(range(len(input_data))):   # 챗봇 대화 로그 데이터에 PK 추가 
-        date_str = input_data['date'][idx]
-        # 날짜 문자열을 datetime 객체로 변환
-        if isinstance(date_str, str):
-            date_value = datetime.fromisoformat(date_str)
-        else:
-            date_value = date_str
-        
-        # UTC를 서울 시간(KST, UTC+9)으로 변환
+    # conv_id 생성 및 KST 변환
+    conv_ids = []
+    for idx in tqdm(range(len(input_data))):
+        date_value = datetime.fromisoformat(input_data['date'][idx])
         kst = timezone(timedelta(hours=9))
         if date_value.tzinfo is None:
-            # timezone 정보가 없으면 UTC로 가정
             date_value = date_value.replace(tzinfo=timezone.utc)
         kst_date = date_value.astimezone(kst)
         
-        # date 컬럼에 저장할 값도 KST로 변환
         input_data.at[idx, 'date'] = kst_date.isoformat()
-        
         pk_date = f"{str(kst_date.year)}{str(kst_date.month).zfill(2)}{str(kst_date.day).zfill(2)}"
-        
-        # 날짜별로 고유한 인덱스 생성 (기존 최대값 + 1부터 시작)
         date_counters[pk_date] += 1
-        
-        # 날짜별 고유한 conv_id 생성
-        conv_id = pk_date + '_' + str(date_counters[pk_date]).zfill(5)
-        conv_ids.append(conv_id)
-        
-        # 내용 기반 해시값 생성 (중복 체크용)
-        # Q와 A는 같은 대화이므로 user_id, date, content만으로 해시 생성
-        import hashlib
-        content_hash = hashlib.md5(
-            f"{input_data['user_id'][idx]}_{input_data['content'][idx]}_{input_data['date'][idx]}".encode()
-        ).hexdigest()
-        content_hashes.append(content_hash)
-        
-        # Q&A 쌍 연결을 위한 hash_ref 생성
-        qa_type = input_data['q/a'][idx]
-        
-        if qa_type == 'Q':
-            # Q인 경우: 자신의 해시값을 저장하고 hash_ref는 NULL
-            qa_pairs[idx] = content_hash  # 현재 Q의 해시값을 저장
-            hash_refs.append(None)
-        elif qa_type == 'A':
-            # A인 경우: 바로 앞의 Q(idx-1)의 해시값을 hash_ref로 설정
-            if (idx - 1) in qa_pairs:
-                hash_refs.append(qa_pairs[idx - 1])
-            else:
-                # Q를 찾지 못한 경우
-                hash_refs.append(None)
-                print(f"⚠️ A에 대응하는 Q를 찾지 못함: {conv_id} (idx: {idx})")
-        else:
-            hash_refs.append(None)
+        conv_ids.append(f"{pk_date}_{str(date_counters[pk_date]).zfill(5)}")
     
     input_data.insert(0, 'conv_id', conv_ids)
-    input_data.insert(1, 'hash_value', content_hashes)  # 해시값 컬럼 추가
-    input_data.insert(2, 'hash_ref', hash_refs)  # Q&A 연결용 hash_ref 컬럼 추가
-    
-    # 디버깅: hash_ref 값 확인
-    print(f"🔍 hash_ref 값 샘플 (처음 5개): {hash_refs[:5]}")
-    print(f"🔍 hash_value 값 샘플 (처음 5개): {content_hashes[:5]}")
-    print(f"🔍 input_data 컬럼 순서: {list(input_data.columns)}")
-    print(f"🔍 input_data shape: {input_data.shape}")
     
     # Q&A 연결 통계
     q_count = sum(1 for qa in input_data['q/a'] if qa == 'Q')
     a_count = sum(1 for qa in input_data['q/a'] if qa == 'A')
-    a_with_ref = sum(1 for ref in hash_refs if ref is not None)
+    a_with_ref = sum(1 for ref in input_data['hash_ref'] if ref is not None)
     print(f"📊 Q&A 연결 통계: Q {q_count}개, A {a_count}개, A에 hash_ref 있음 {a_with_ref}개")
     
     # 중복 저장 방지 통계
