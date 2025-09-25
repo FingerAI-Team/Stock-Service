@@ -105,14 +105,14 @@ class TableEditor:
                     self.db_connection.conn.commit()
             elif data_type == 'raw':
                 # raw 데이터의 경우 해시값과 hash_ref가 포함된 새로운 형식
-                if len(data) == 8:  # conv_id, hash_value, hash_ref, date, q/a, content, user_id, tenant_id
+                if len(data) == 8:  # conv_id, date, q/a, content, user_id, tenant_id, hash_value, hash_ref
                     self.db_connection.cur.execute(
-                        f"INSERT INTO {table_name} (conv_id, hash_value, hash_ref, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                        f"INSERT INTO {table_name} (conv_id, date, qa, content, user_id, tenant_id, hash_value, hash_ref) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                         tuple(data)
                     )
                 elif len(data) == 7:  # 기존 형식 (hash_ref 없음)
                     self.db_connection.cur.execute(
-                        f"INSERT INTO {table_name} (conv_id, hash_value, date, qa, content, user_id, tenant_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                        f"INSERT INTO {table_name} (conv_id, date, qa, content, user_id, tenant_id, hash_value) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                         tuple(data)
                     )
                 elif len(data) == 6:  # 더 오래된 형식 (해시값도 없음)
