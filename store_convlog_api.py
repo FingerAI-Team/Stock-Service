@@ -184,7 +184,11 @@ def main(args):
         date_counters[pk_date] += 1
         conv_ids.append(f"{pk_date}_{str(date_counters[pk_date]).zfill(5)}")
     
+    # conv_id를 첫 번째 컬럼으로 삽입
     input_data.insert(0, 'conv_id', conv_ids)
+    
+    # DB 테이블 구조에 맞는 컬럼 순서로 재정렬
+    input_data = input_data[['conv_id', 'date', 'q/a', 'content', 'user_id', 'tenant_id', 'hash_value', 'hash_ref']]
     
     # Q&A 연결 통계
     q_count = sum(1 for qa in input_data['q/a'] if qa == 'Q')
@@ -211,9 +215,13 @@ def main(args):
         if idx < 3:
             print(f"🔍 저장할 데이터 {idx}: {data_set}")
             print(f"   - conv_id: {data_set[0]}")
-            print(f"   - hash_value: {data_set[1]}")
-            print(f"   - hash_ref: {data_set[2]}")
-            print(f"   - q/a: {data_set[4]}")
+            print(f"   - date: {data_set[1]}")
+            print(f"   - q/a: {data_set[2]}")
+            print(f"   - content: {data_set[3][:50]}...")
+            print(f"   - user_id: {data_set[4]}")
+            print(f"   - tenant_id: {data_set[5]}")
+            print(f"   - hash_value: {data_set[6]}")
+            print(f"   - hash_ref: {data_set[7]}")
         
         pipe.table_editor.edit_conv_table('insert', pipe.env_manager.conv_tb_name, data_type='raw', data=data_set)
     
