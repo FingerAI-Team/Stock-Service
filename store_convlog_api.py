@@ -49,7 +49,7 @@ def main(args):
     db_manager = DBManager(env_manager.db_config)
     api_pipeline = APIPipeline(bearer_tok=env_manager.bearer_token) 
 
-    pipe = PipelineController(env_ manager=env_manager, preprocessor=preprocessor, db_manager=db_manager)   
+    pipe = PipelineController(env_manager=env_manager, preprocessor=preprocessor, db_manager=db_manager)   
     pipe.set_env()
 
     # input_data 초기화
