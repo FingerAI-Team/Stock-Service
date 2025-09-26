@@ -13,9 +13,9 @@ SCHEDULE_OPTIONS = {
         'trigger': CronTrigger(minute=5),  # 매시 5분
         'description': '매시간 5분에 실행'
     },
-    'hourly_10min': {
-        'trigger': CronTrigger(minute=10),  # 매시 10분
-        'description': '매시간 10분에 실행'
+    'hourly_6min': {
+        'trigger': CronTrigger(minute=6),  # 매시 6분
+        'description': '매시간 6분에 실행'
     },
     'daily': {
         'trigger': CronTrigger(hour=5, minute=10),  # 매일 5시 10분
