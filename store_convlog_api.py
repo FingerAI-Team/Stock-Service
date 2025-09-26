@@ -52,20 +52,7 @@ def main(args):
     pipe = PipelineController(env_manager=env_manager, preprocessor=preprocessor, db_manager=db_manager)   
     pipe.set_env()
 
-    # input_data 초기화
-    input_data = None
-    if args.process == 'code-test':   # 저장할 파일명 지정   
-        file_extension = args.file_name.split('.')[-1].lower()
-        file_path = os.path.join(args.data_path, args.file_name)
-        if file_extension == 'csv': 
-            input_data = pd.read_csv(file_path)
-        elif file_extension == 'xlsx':
-            input_data = pd.read_excel(file_path)
-        else:
-            logger.error(f"❌ 지원하지 않는 파일 형식입니다: {file_extension}")
-            logger.error("지원 형식: csv, xlsx")
-            return
-    elif args.process == 'daily':    # 매일 12시 10분에 당일 데이터 저장
+    if args.process == 'daily':    # 매일 12시 10분에 당일 데이터 저장
         # 당일 날짜 기준으로 API 호출 (ibk, ibks 모두 수집)
         today = datetime.now().strftime("%Y-%m-%d")
         logger.info(f"📅 당일 데이터 수집: {today}")
@@ -97,7 +84,6 @@ def main(args):
     elif args.process == 'scheduled':  # 스케줄링 모드 - 매시간 실행
         # 현재 시간 기준으로 데이터 수집 (ibk, ibks 모두 수집)
         current_time = datetime.now()
-        # 매시간 실행이므로 현재 시간의 데이터를 수집
         start_date = current_time.strftime("%Y-%m-%d")
         logger.info(f"📅 스케줄링 모드 - 현재 시간 데이터 수집: {start_date}")
         
@@ -129,7 +115,6 @@ def main(args):
         logger.error("지원 타입: code-test, daily, scheduled")
         return
 
-    # input_data가 None이거나 비어있는 경우 체크
     if input_data is None:
         logger.error("❌ input_data가 초기화되지 않았습니다.")
         return
@@ -138,7 +123,6 @@ def main(args):
         logger.warning("❌ input_data가 비어있습니다.")
         return
 
-    # 필요한 컬럼이 있는지 확인
     required_columns = ['date', 'q/a', 'content', 'user_id', 'tenant_id', 'hash_value', 'hash_ref']
     missing_columns = [col for col in required_columns if col not in input_data.columns]
     if missing_columns:
@@ -147,8 +131,6 @@ def main(args):
         return
 
     input_data = input_data[required_columns]
-    
-    # 날짜별 conv_id 카운터 초기화
     date_counters = {}
     
     # 기존 DB에서 각 날짜별 최대 conv_id 조회
@@ -184,23 +166,17 @@ def main(args):
         date_counters[pk_date] += 1
         conv_ids.append(f"{pk_date}_{str(date_counters[pk_date]).zfill(5)}")
     
-    # conv_id를 첫 번째 컬럼으로 삽입
-    input_data.insert(0, 'conv_id', conv_ids)
-    
-    # DB 테이블 구조에 맞는 컬럼 순서로 재정렬
+    input_data.insert(0, 'conv_id', conv_ids)    
     input_data = input_data[['conv_id', 'date', 'q/a', 'content', 'user_id', 'tenant_id', 'hash_value', 'hash_ref']]
     
-    # Q&A 연결 통계
     q_count = sum(1 for qa in input_data['q/a'] if qa == 'Q')
     a_count = sum(1 for qa in input_data['q/a'] if qa == 'A')
     a_with_ref = sum(1 for ref in input_data['hash_ref'] if ref is not None)
     print(f"📊 Q&A 연결 통계: Q {q_count}개, A {a_count}개, A에 hash_ref 있음 {a_with_ref}개")
     
-    # 중복 저장 방지 통계
     total_records = len(input_data)
     existing_records = 0
-    new_records = 0
-    
+    new_records = 0    
     for idx in tqdm(range(len(input_data))):   # PostgreSQL 테이블에 데이터 저장
         # 해시값 기준으로 중복 체크
         if pipe.postgres.check_hash_duplicate(pipe.env_manager.conv_tb_name, input_data['hash_value'][idx]):
@@ -211,7 +187,6 @@ def main(args):
         new_records += 1
         data_set = tuple(input_data.iloc[idx].values)
         
-        # 디버깅: 저장할 데이터 확인 (처음 3개만)
         if idx < 3:
             print(f"🔍 저장할 데이터 {idx}: {data_set}")
             print(f"   - conv_id: {data_set[0]}")
@@ -221,18 +196,15 @@ def main(args):
             print(f"   - user_id: {data_set[4]}")
             print(f"   - tenant_id: {data_set[5]}")
             print(f"   - hash_value: {data_set[6]}")
-            print(f"   - hash_ref: {data_set[7]}")
-        
+            print(f"   - hash_ref: {data_set[7]}")        
         pipe.table_editor.edit_conv_table('insert', pipe.env_manager.conv_tb_name, data_type='raw', data=data_set)
     
-    # 저장 결과 요약
     summary_msg = f"📊 데이터 저장 완료 - 전체: {total_records}, 신규: {new_records}, 중복: {existing_records}"
     print(f"\n{summary_msg}")
     print(f"   전체 레코드: {total_records}")
     print(f"   새로 저장된 레코드: {new_records}")
     print(f"   이미 존재하는 레코드: {existing_records}")
-    print(f"   중복률: {(existing_records/total_records*100):.1f}%" if total_records > 0 else "   중복률: 0%")
-    
+    print(f"   중복률: {(existing_records/total_records*100):.1f}%" if total_records > 0 else "   중복률: 0%")    
     logger.info(summary_msg)
     logger.info(f"✅ 데이터 수집 작업이 완료되었습니다. ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})")
     pipe.postgres.db_connection.close()
@@ -281,9 +253,7 @@ if __name__ == '__main__':
         for job in scheduler.get_jobs():
             logger.info(f"   - {job.name}: {job.next_run_time}")
         
-        # 스케줄러 상태 확인을 위한 주기적 로그
         logger.info("⏰ 스케줄러가 실행 중입니다. 매시간 5분에 데이터 수집이 실행됩니다.")
-        
         try:
             # 메인 스레드 유지 및 주기적 상태 확인
             check_count = 0
