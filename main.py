@@ -64,6 +64,7 @@ if __name__ == '__main__':
             replace_existing=True
         )
         
+        logger.info("데이터 수집은 매 정시 5분, 종목 예측은 매 정시 6분에 진행됩니다")
         logger.info(f"Main Pipeline 스케줄러 시작 - {schedule_config['description']}")
         logger.info("한 번만 실행하려면: python main.py --once")
         try:
