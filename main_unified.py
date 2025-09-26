@@ -31,17 +31,20 @@ def run_scheduled():
     pipeline.run_full_pipeline()
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1 and sys.argv[1] == '--once':
+    # 공통 argument parser 설정
+    cli_parser = argparse.ArgumentParser()
+    cli_parser.add_argument('--config_path', type=str, default='./config/')
+    cli_parser.add_argument('--data_path', type=str, default='./data/')
+    cli_parser.add_argument('--file_name', type=str, default='conv_log-0705-0902.xlsx')
+    cli_parser.add_argument('--process', type=str, default='scheduled')
+    cli_parser.add_argument('--task_name', type=str, default='cls')
+    cli_parser.add_argument('--query', type=str, default=None)
+    cli_parser.add_argument('--once', action='store_true', help='한 번만 실행 (오늘 날짜 기준 API 호출)')
+    cli_args = cli_parser.parse_args()
+    
+    if cli_args.once:
         # 한 번만 실행 (오늘 날짜 기준 API 호출)
-        cli_parser = argparse.ArgumentParser()
-        cli_parser.add_argument('--config_path', type=str, default='./config/')
-        cli_parser.add_argument('--data_path', type=str, default='./data/')
-        cli_parser.add_argument('--file_name', type=str, default='conv_log-0705-0902.xlsx')
-        cli_parser.add_argument('--process', type=str, default='daily')  # API 호출을 위해 daily로 설정
-        cli_parser.add_argument('--task_name', type=str, default='cls')
-        cli_parser.add_argument('--query', type=str, default=None)
-        cli_args = cli_parser.parse_args()
-        
+        cli_args.process = 'daily'  # API 호출을 위해 daily로 설정
         logger.info("🚀 일회성 실행 모드: 오늘 날짜 기준 API 데이터 수집 및 분석")
         pipeline = UnifiedPipeline(cli_args)
         pipeline.run_full_pipeline()
