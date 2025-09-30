@@ -156,22 +156,24 @@ class TableEditor:
         elif task == 'update':
             pass
 
-    def edit_hash_table(self, task, table_name, data_type=None, data=None, col=None, val=None):
-        if task == 'insert':
-            if data_type=='table':
-                for idx in range(len(data)):
-                    self.db_connection.cur.execute(
-                        f"INSERT INTO {table_name} (hash_id, hash_value) VALUES (%s, %s)",
-                        (data['hash_id'][idx], data['hash_value'][idx])
-                    )
-                self.db_connection.conn.commit()
-            elif data_type=='raw':
-                self.db_connection.cur.execute(
-                    f"INSERT INTO {table_name} (hash_id, hash_value) VALUES (%s, %s)",
-                    tuple(data)
-                )
-                self.db_connection.conn.commit()
-        elif task == 'delete':
-            pass 
-        elif task == 'update':
-            pass
+    def get_hash_id(self, hash_value: str) -> int:
+        """
+        hash_table에서 hash_value에 대응하는 hash_id를 가져오거나,
+        없으면 새로 생성 후 hash_id를 반환합니다.
+        """
+        self.db_connection.conn.commit()
+        self.db_connection.cur.execute(   # 1. 이미 존재하는지 확인
+            "SELECT hash_id FROM hash_table WHERE hash_value = %s",
+            (hash_value,)
+        )
+        row = self.db_connection.cur.fetchone()
+        if row:
+            return row[0]  # 기존 hash_id 반환
+        
+        self.db_connection.cur.execute(   # 2. 없으면 insert 후 반환
+            "INSERT INTO hash_table (hash_value) VALUES (%s) RETURNING hash_id",
+            (hash_value,)
+        )
+        new_id = self.db_connection.cur.fetchone()[0]
+        self.db_connection.conn.commit()
+        return new_id
