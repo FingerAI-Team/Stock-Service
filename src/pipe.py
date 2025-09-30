@@ -116,7 +116,6 @@ class APIPipeline:
             else:
                 print(f"API 요청 실패: {response.status_code} - {response.text}")
                 return []
-                
         except Exception as e:
             print(f"API 요청 중 오류 발생: {str(e)}")
             return []
@@ -158,7 +157,6 @@ class APIPipeline:
                 })
             else:
                 print(f"데이터 구조가 예상과 다릅니다: {d.keys()}")
-        
         if not records:
             print("처리 가능한 레코드가 없습니다.")
             return pd.DataFrame(columns=["date", "q/a", "content", "user_id", "tenant_id", "hash_value", "hash_ref"])
