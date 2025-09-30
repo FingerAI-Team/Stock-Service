@@ -2,6 +2,7 @@ from .preprocessor import DataProcessor, TextProcessor, VecProcessor, TimeProces
 from .encoder import KFDeBERTaTokenizer, KFDeBERTa, ModelTrainer, ModelPredictor
 from .database import PostgresDB, DBConnection, TableEditor
 from .llm import LLMOpenAI
+from datetime import datetime, timezone, timedelta
 from datasets import Dataset, DatasetDict
 from dotenv import load_dotenv
 from tqdm import tqdm
@@ -11,7 +12,7 @@ import json
 import os
 import requests
 import logging
-from datetime import datetime, timezone, timedelta
+import hashlib
 
 
 class EnvManager:
@@ -108,7 +109,6 @@ class APIPipeline:
         try:
             response = requests.get(request_url, headers=headers)
             print(f"API 응답 상태 코드: {response.status_code}")
-            
             if response.status_code == 200:
                 data = response.json()
                 print(f"API 응답 데이터 타입: {type(data)}")
@@ -120,48 +120,36 @@ class APIPipeline:
             print(f"API 요청 중 오류 발생: {str(e)}")
             return []
     
-    def process_data(self, data):
+    def process_data(self, table_editor, data):
         '''
-        api로 받은 데이터를 postgres db에 저장 가능한 형태로 변경  
-        date, qa, content, user_id, tenant_id, hash_value, hash_ref: ibk, msty 
+        api로 받은 데이터를 postgres db에 저장 가능한 형태로 변경 
+        api 반환 값: tenant_id, Q, A, date, user_id 
+        DB 저장 형태: date, question, answer, user_id, tenant_id, hash_id
+        * tenant_id: ibk, ibks  + mtsy (향후 추가 가능) 
         '''
         if not data:
             print("API에서 받은 데이터가 비어있습니다.")
-            return pd.DataFrame(columns=["date", "q/a", "content", "user_id", "tenant_id", "hash_value", "hash_ref"])
-            
-        import hashlib
+            return pd.DataFrame(columns=["date", "question", "answer", "user_id", "tenant_id", "hash_id"])
+        
         records = []
         for d in data:
             if "Q" in d and "A" in d and "date" in d and "user_id" in d:
-                # Q와 A의 해시값을 미리 생성
-                q_hash = hashlib.md5(f"{d['user_id']}_{d['Q']}_{d['date']}".encode()).hexdigest()
-                a_hash = hashlib.md5(f"{d['user_id']}_{d['A']}_{d['date']}".encode()).hexdigest()
-                
+                hash_value = hashlib.md5(f"{d['user_id']}_{d['Q']}_{d['date']}".encode()).hexdigest()
+                hash_id = table_editor.get_hash_id(hash_value)
                 records.append({
                     "date": d["date"], 
-                    "q/a": "Q", 
-                    "content": d["Q"], 
+                    "question": d["Q"],
+                    "answer": d["A"],
                     "user_id": d["user_id"], 
                     "tenant_id": d["tenant_id"],
-                    "hash_value": q_hash,
-                    "hash_ref": None  # Q는 hash_ref가 NULL
-                })
-                records.append({
-                    "date": d["date"], 
-                    "q/a": "A", 
-                    "content": d["A"], 
-                    "user_id": d["user_id"], 
-                    "tenant_id": d["tenant_id"],
-                    "hash_value": a_hash,
-                    "hash_ref": q_hash  # A는 Q의 hash_value를 hash_ref로
+                    "hash_id": hash_id,
                 })
             else:
                 print(f"데이터 구조가 예상과 다릅니다: {d.keys()}")
         if not records:
             print("처리 가능한 레코드가 없습니다.")
-            return pd.DataFrame(columns=["date", "q/a", "content", "user_id", "tenant_id", "hash_value", "hash_ref"])
-            
-        input_data = pd.DataFrame(records, columns=["date", "q/a", "content", "user_id", "tenant_id", "hash_value", "hash_ref"])
+            return pd.DataFrame(columns=["date", "q/a", "content", "user_id", "tenant_id"])
+        input_data = pd.DataFrame(records, columns=["date", "question", "answer", "user_id", "tenant_id", "hash_id"])
         print(f"처리된 레코드 수: {len(input_data)}")
         return input_data
 
@@ -311,7 +299,6 @@ class PipelineController:
 
 class UnifiedPipeline:
     """데이터 수집과 분석을 통합한 파이프라인"""
-    
     def __init__(self, args):
         self.args = args
         self.env_manager = EnvManager(args)
@@ -336,14 +323,11 @@ class UnifiedPipeline:
         logger = logging.getLogger(__name__)
         logger.info("🚀 데이터 수집 작업이 시작되었습니다.")
         logger.info(f"📅 실행 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        
         if self.args.process in ['daily', 'scheduled']:
-            # API를 통한 데이터 수집
             current_time = datetime.now()
             start_date = current_time.strftime("%Y-%m-%d")
             logger.info(f"📅 데이터 수집 날짜: {start_date}")
             
-            # ibk와 ibks 두 tenant_id 모두 수집
             all_api_data = []
             tenant_ids = ['ibk', 'ibks']
             for tenant_id in tenant_ids:
@@ -354,42 +338,16 @@ class UnifiedPipeline:
                     logger.info(f"   ✅ {tenant_id}: {len(api_data)}개 레코드 수집")
                 else:
                     logger.info(f"   ⚠️ {tenant_id}: 데이터 없음")
-            
             logger.info(f"📊 총 수집된 API 데이터: {len(all_api_data)}개")
             if not all_api_data:
                 logger.warning("❌ 수집된 데이터가 없습니다.")
                 return None
-            
             input_data = self.api_pipeline.process_data(all_api_data)
             logger.info(f"처리된 데이터 shape: {input_data.shape}")
-            
             if input_data.empty:
                 logger.warning("❌ 처리된 데이터가 비어있습니다.")
                 return None
-            
             return input_data
-        
-        elif self.args.process == 'code-test':
-            # 기존 파일에서 데이터 로드
-            logger.info("📁 기존 파일에서 데이터를 로드합니다.")
-            if self.args.file_name.split('.')[-1] == 'csv':
-                input_data = pd.read_csv(f"{self.args.data_path}/{self.args.file_name}")
-            elif self.args.file_name.split('.')[-1] == 'xlsx':
-                input_data = pd.read_excel(f"{self.args.data_path}/{self.args.file_name}")
-            else:
-                logger.error("❌ 지원하지 않는 파일 형식입니다.")
-                return None
-            
-            # 필요한 컬럼만 선택
-            required_columns = ['date', 'q/a', 'content', 'user_id']
-            if all(col in input_data.columns for col in required_columns):
-                input_data = input_data[required_columns]
-            else:
-                logger.error(f"❌ 필요한 컬럼이 없습니다: {required_columns}")
-                return None
-            
-            return input_data
-        
         else:
             logger.error(f"❌ 지원하지 않는 프로세스 타입입니다: {self.args.process}")
             return None
@@ -402,15 +360,13 @@ class UnifiedPipeline:
             return False
         
         logger.info("💾 데이터 처리 및 저장을 시작합니다.")
-        
         # API 데이터인 경우 추가 컬럼 처리
         if self.args.process in ['daily', 'scheduled']:
-            required_columns = ['date', 'q/a', 'content', 'user_id', 'tenant_id', 'hash_value', 'hash_ref']
+            required_columns = ['date', 'question', 'answer', 'user_id', 'tenant_id', 'hash_id']
             missing_columns = [col for col in required_columns if col not in input_data.columns]
             if missing_columns:
                 logger.error(f"❌ 필요한 컬럼이 없습니다: {missing_columns}")
                 return False
-            
             input_data = input_data[required_columns]
             
             # 날짜별 카운터 초기화
@@ -422,7 +378,6 @@ class UnifiedPipeline:
                     date_value = date_value.replace(tzinfo=timezone.utc)
                 kst_date = date_value.astimezone(kst)
                 pk_date = f"{str(kst_date.year)}{str(kst_date.month).zfill(2)}{str(kst_date.day).zfill(2)}"
-                
                 try:
                     self.pipe.postgres.db_connection.cur.execute(
                         f"SELECT MAX(conv_id) FROM {self.env_manager.conv_tb_name} WHERE conv_id LIKE %s",
@@ -448,8 +403,7 @@ class UnifiedPipeline:
                 conv_ids.append(f"{pk_date}_{str(date_counters[pk_date]).zfill(5)}")
             
             input_data.insert(0, 'conv_id', conv_ids)
-            input_data = input_data[['conv_id', 'date', 'q/a', 'content', 'user_id', 'tenant_id', 'hash_value', 'hash_ref']]
-            
+            input_data = input_data[['conv_id', 'date', 'question', 'answer', 'user_id', 'tenant_id', 'hash_id']]
         else:
             # 기존 파일 데이터 처리
             conv_ids = []
@@ -464,8 +418,7 @@ class UnifiedPipeline:
         if 'q/a' in input_data.columns:
             q_count = sum(1 for qa in input_data['q/a'] if qa == 'Q')
             a_count = sum(1 for qa in input_data['q/a'] if qa == 'A')
-            logger.info(f"📊 Q&A 통계: Q {q_count}개, A {a_count}개")
-            
+            logger.info(f"📊 Q&A 통계: Q {q_count}개, A {a_count}개")          
             if 'hash_ref' in input_data.columns:
                 a_with_ref = sum(1 for ref in input_data['hash_ref'] if ref is not None)
                 logger.info(f"📊 A에 hash_ref 있음: {a_with_ref}개")
@@ -473,37 +426,26 @@ class UnifiedPipeline:
         # 데이터베이스에 저장
         total_records = len(input_data)
         existing_records = 0
-        new_records = 0
-        
+        new_records = 0 
         for idx in tqdm(range(len(input_data))):
             # 중복 체크 (API 데이터인 경우 해시값으로, 파일 데이터인 경우 PK로)
-            if self.args.process in ['daily', 'scheduled'] and 'hash_value' in input_data.columns:
-                if self.pipe.postgres.check_hash_duplicate(self.env_manager.conv_tb_name, input_data['hash_value'][idx]):
+            if self.args.process in ['daily', 'scheduled'] and 'hash_id' in input_data.columns:
+                if self.pipe.postgres.check_hash_duplicate(self.env_manager.conv_tb_name, input_data['hash_id'][idx]):
                     existing_records += 1
                     logger.info(f"이미 존재하는 데이터 (해시: {input_data['hash_value'][idx][:8]}...): {input_data['conv_id'][idx]}")
                     continue
-            else:
-                if self.pipe.postgres.check_pk(self.env_manager.conv_tb_name, input_data['conv_id'][idx]):
-                    existing_records += 1
-                    logger.info(f"이미 존재하는 데이터: {input_data['conv_id'][idx]}")
-                    continue
-            
             new_records += 1
             data_set = tuple(input_data.iloc[idx].values)
             self.pipe.table_editor.edit_conv_table('insert', self.env_manager.conv_tb_name, data_type='raw', data=data_set)
-        
-        # 저장 결과 요약
         summary_msg = f"📊 데이터 저장 완료 - 전체: {total_records}, 신규: {new_records}, 중복: {existing_records}"
         logger.info(summary_msg)
         logger.info(f"   중복률: {(existing_records/total_records*100):.1f}%" if total_records > 0 else "   중복률: 0%")
-        
         return True
     
     def run_analysis(self):
         """분석 단계 실행"""
         logger = logging.getLogger(__name__)
         logger.info("🔍 데이터 분석 작업을 시작합니다.")
-        
         try:
             # 분석 프로세스 실행
             self.pipe.run(process=self.args.process, query=self.args.query)
