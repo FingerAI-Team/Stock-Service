@@ -155,3 +155,23 @@ class TableEditor:
             pass 
         elif task == 'update':
             pass
+
+    def edit_hash_table(self, task, table_name, data_type=None, data=None, col=None, val=None):
+        if task == 'insert':
+            if data_type=='table':
+                for idx in range(len(data)):
+                    self.db_connection.cur.execute(
+                        f"INSERT INTO {table_name} (hash_id, hash_value) VALUES (%s, %s)",
+                        (data['hash_id'][idx], data['hash_value'][idx])
+                    )
+                self.db_connection.conn.commit()
+            elif data_type=='raw':
+                self.db_connection.cur.execute(
+                    f"INSERT INTO {table_name} (hash_id, hash_value) VALUES (%s, %s)",
+                    tuple(data)
+                )
+                self.db_connection.conn.commit()
+        elif task == 'delete':
+            pass 
+        elif task == 'update':
+            pass
