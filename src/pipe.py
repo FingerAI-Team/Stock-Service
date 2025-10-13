@@ -270,7 +270,8 @@ class PipelineController:
                 cleaned_word = self.text_p.remove_patterns(query, r"(뉴스|주식|정보|분석)$")    # 불필요한 단어 제거
                 enc_res = 'o' if cleaned_word in self.tickle_list else 'x'
             cls_pred_set = (input_data[idx][0], enc_res)  
-            PATTERN_TICKER = r"\((?:(?:KRX?|KS|KQ)\s*:\s*)?\d{6}\)"
+            # PATTERN_TICKER = r"\((?:(?:KRX?|KS|KQ)\s*:\s*)?\d{6}\)"
+            PATTERN_TICKER = r"\b\w+\(KR:\d+\)"
             clicked = 'o' if self.text_p.check_expr(PATTERN_TICKER, query) else 'x'
             u_id = input_data[idx][4]
             clicked_set = (input_data[idx][0], clicked, u_id)
