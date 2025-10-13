@@ -136,7 +136,6 @@ class APIPipeline:
                 # Q와 A의 해시값을 미리 생성
                 q_hash = hashlib.md5(f"{d['user_id']}_{d['Q']}_{d['date']}".encode()).hexdigest()
                 a_hash = hashlib.md5(f"{d['user_id']}_{d['A']}_{d['date']}".encode()).hexdigest()
-                
                 records.append({
                     "date": d["date"], 
                     "q/a": "Q", 
@@ -282,7 +281,8 @@ class PipelineController:
                 cleaned_word = self.text_p.remove_patterns(query, r"(뉴스|주식|정보|분석)$")    # 불필요한 단어 제거
                 enc_res = 'o' if cleaned_word in self.tickle_list else 'x'
             cls_pred_set = (input_data[idx][0], enc_res)  
-            clicked = 'o' if self.text_p.check_expr(r"\b\w+\(KR:\d+\)", query) else 'x'
+            TICKLE_PATTERN = r"\b\w+\(KR:\d+\)"
+            clicked = 'o' if self.text_p.check_expr(TICKLE_PATTERN, query) else 'x'
             u_id = input_data[idx][4]
             clicked_set = (input_data[idx][0], clicked, u_id)
 
