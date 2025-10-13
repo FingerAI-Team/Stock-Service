@@ -344,7 +344,7 @@ class UnifiedPipeline:
             if not all_api_data:
                 logger.warning("❌ 수집된 데이터가 없습니다.")
                 return None
-            input_data = self.api_pipeline.process_data(all_api_data)
+            input_data = self.api_pipeline.process_data(self.pipe.table_editor, all_api_data)
             logger.info(f"처리된 데이터 shape: {input_data.shape}")
             if input_data.empty:
                 logger.warning("❌ 처리된 데이터가 비어있습니다.")
