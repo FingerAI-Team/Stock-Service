@@ -163,7 +163,7 @@ class TableEditor:
         """
         self.db_connection.conn.commit()
         self.db_connection.cur.execute(   # 1. 이미 존재하는지 확인
-            "SELECT hash_id FROM hash_table WHERE hash_value = %s",
+            "SELECT hash_id FROM ibk_hash WHERE hash_value = %s",
             (hash_value,)
         )
         row = self.db_connection.cur.fetchone()
@@ -171,7 +171,7 @@ class TableEditor:
             return row[0]  # 기존 hash_id 반환
         
         self.db_connection.cur.execute(   # 2. 없으면 insert 후 반환
-            "INSERT INTO hash_table (hash_value) VALUES (%s) RETURNING hash_id",
+            "INSERT INTO ibk_hash (hash_value) VALUES (%s) RETURNING hash_id",
             (hash_value,)
         )
         new_id = self.db_connection.cur.fetchone()[0]
