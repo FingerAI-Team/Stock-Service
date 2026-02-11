@@ -133,15 +133,20 @@ class APIPipeline:
         records = []
         for d in data:
             if "Q" in d and "A" in d and "date" in d and "user_id" in d:
-                # Q와 A의 해시값을 미리 생성
-                q_hash = hashlib.md5(f"{d['user_id']}_{d['Q']}_{d['date']}".encode()).hexdigest()
-                a_hash = hashlib.md5(f"{d['user_id']}_{d['A']}_{d['date']}".encode()).hexdigest()
+                # user_id가 None인 경우 처리
+                user_id = d["user_id"] if d["user_id"] is not None else ""
+                tenant_id = d.get("tenant_id") if d.get("tenant_id") is not None else None
+                
+                # Q와 A의 해시값을 미리 생성 (user_id가 None이면 빈 문자열 사용)
+                q_hash = hashlib.md5(f"{user_id}_{d['Q']}_{d['date']}".encode()).hexdigest()
+                a_hash = hashlib.md5(f"{user_id}_{d['A']}_{d['date']}".encode()).hexdigest()
+                
                 records.append({
                     "date": d["date"], 
                     "q/a": "Q", 
                     "content": d["Q"], 
-                    "user_id": d["user_id"], 
-                    "tenant_id": d["tenant_id"],
+                    "user_id": d["user_id"],  # None 값도 그대로 저장 (DB에서 nullable)
+                    "tenant_id": tenant_id,
                     "hash_value": q_hash,
                     "hash_ref": None  # Q는 hash_ref가 NULL
                 })
@@ -149,8 +154,8 @@ class APIPipeline:
                     "date": d["date"], 
                     "q/a": "A", 
                     "content": d["A"], 
-                    "user_id": d["user_id"], 
-                    "tenant_id": d["tenant_id"],
+                    "user_id": d["user_id"],  # None 값도 그대로 저장 (DB에서 nullable)
+                    "tenant_id": tenant_id,
                     "hash_value": a_hash,
                     "hash_ref": q_hash  # A는 Q의 hash_value를 hash_ref로
                 })
