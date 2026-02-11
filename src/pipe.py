@@ -133,11 +133,11 @@ class APIPipeline:
         records = []
         for d in data:
             if "Q" in d and "A" in d and "date" in d and "user_id" in d:
-                # user_id가 None인 경우 처리
-                user_id = d["user_id"] if d["user_id"] is not None else ""
+                # user_id가 None인 경우 'UNKNOWN'으로 처리
+                user_id = d["user_id"] if d["user_id"] is not None and d["user_id"] != "" else "UNKNOWN"
                 tenant_id = d.get("tenant_id") if d.get("tenant_id") is not None else None
                 
-                # Q와 A의 해시값을 미리 생성 (user_id가 None이면 빈 문자열 사용)
+                # Q와 A의 해시값을 미리 생성 (user_id가 None이면 'UNKNOWN' 사용)
                 q_hash = hashlib.md5(f"{user_id}_{d['Q']}_{d['date']}".encode()).hexdigest()
                 a_hash = hashlib.md5(f"{user_id}_{d['A']}_{d['date']}".encode()).hexdigest()
                 
@@ -145,7 +145,7 @@ class APIPipeline:
                     "date": d["date"], 
                     "q/a": "Q", 
                     "content": d["Q"], 
-                    "user_id": d["user_id"],  # None 값도 그대로 저장 (DB에서 nullable)
+                    "user_id": user_id,  # None이면 'UNKNOWN'으로 저장
                     "tenant_id": tenant_id,
                     "hash_value": q_hash,
                     "hash_ref": None  # Q는 hash_ref가 NULL
@@ -154,7 +154,7 @@ class APIPipeline:
                     "date": d["date"], 
                     "q/a": "A", 
                     "content": d["A"], 
-                    "user_id": d["user_id"],  # None 값도 그대로 저장 (DB에서 nullable)
+                    "user_id": user_id,  # None이면 'UNKNOWN'으로 저장
                     "tenant_id": tenant_id,
                     "hash_value": a_hash,
                     "hash_ref": q_hash  # A는 Q의 hash_value를 hash_ref로
@@ -494,7 +494,12 @@ class UnifiedPipeline:
                     continue
             
             new_records += 1
-            data_set = tuple(input_data.iloc[idx].values)
+            data_set = list(input_data.iloc[idx].values)
+            # user_id가 None이거나 빈 문자열인 경우 'UNKNOWN'으로 변경
+            if len(data_set) >= 5:  # user_id는 인덱스 4 (conv_id, date, q/a, content, user_id, ...)
+                if data_set[4] is None or data_set[4] == "":
+                    data_set[4] = "UNKNOWN"
+            data_set = tuple(data_set)
             self.pipe.table_editor.edit_conv_table('insert', self.env_manager.conv_tb_name, data_type='raw', data=data_set)
         
         # 저장 결과 요약
